@@ -1,77 +1,167 @@
 export enum CheatFlag {
-  GodMode = "GodMode",
-  NoClip = "NoClip",
-  InfiniteTime = "InfiniteTime",
-  GiveSword = "GiveSword",
-  SetHealth = "SetHealth"
+    God = 'God',
+    Noclip = 'Noclip',
+    InfTime = 'InfTime',
+    GiveSword = 'GiveSword'
 }
 
-// Define specific types for cheat values
-type CheatValue = boolean | number | null;
+export interface CheatManagerConfig {
+    enabled?: boolean;
+    defaultFlags?: Partial<Record<CheatFlag, boolean>>;
+}
 
 export class CheatManager {
-  private flags: Record<CheatFlag, CheatValue> = {
-    [CheatFlag.GodMode]: false,
-    [CheatFlag.NoClip]: false,
-    [CheatFlag.InfiniteTime]: false,
-    [CheatFlag.GiveSword]: false,
-    [CheatFlag.SetHealth]: null
-  };
+    private flags: Map<CheatFlag, boolean> = new Map();
+    private healthOverride: number | null = null;
+    private config: CheatManagerConfig;
+    private listeners: Map<CheatFlag, Set<(enabled: boolean) => void>> = new Map();
 
-  public setCheat(flag: CheatFlag, value: CheatValue): void {
-    // Validate value based on cheat type
-    if (flag === CheatFlag.SetHealth && typeof value === 'number') {
-      if (value < 0 || value > 9999) {
-        console.warn(`Invalid health value: ${value}. Must be between 0 and 9999.`);
-        return;
-      }
+    constructor(config: CheatManagerConfig = {}) {
+        this.config = {
+            enabled: false,
+            defaultFlags: {},
+            ...config
+        };
+
+        // Initialize flags with defaults
+        Object.values(CheatFlag).forEach(flag => {
+            const defaultValue = this.config.defaultFlags?.[flag] || false;
+            this.flags.set(flag, defaultValue);
+        });
     }
-    
-    // Validate boolean cheats
-    if (flag !== CheatFlag.SetHealth && typeof value !== 'boolean' && value !== null) {
-      console.warn(`Invalid value type for cheat ${flag}. Expected boolean or null, got ${typeof value}`);
-      return;
+
+    /**
+     * Set a cheat flag
+     */
+    set(flag: CheatFlag, value: boolean): void {
+        const oldValue = this.flags.get(flag);
+        this.flags.set(flag, value);
+        
+        // Notify listeners if value changed
+        if (oldValue !== value) {
+            this.notifyListeners(flag, value);
+        }
     }
-    
-    // Validate SetHealth cheat
-    if (flag === CheatFlag.SetHealth && typeof value !== 'number' && value !== null) {
-      console.warn(`Invalid value type for SetHealth cheat. Expected number or null, got ${typeof value}`);
-      return;
+
+    /**
+     * Check if a cheat flag is enabled
+     */
+    on(flag: CheatFlag): boolean {
+        return this.flags.get(flag) === true;
     }
-    
-    this.flags[flag] = value;
-    console.log(`Cheat ${flag} set to:`, value);
-  }
 
-  public isActive(flag: CheatFlag): boolean {
-    return !!this.flags[flag];
-  }
-
-  public getValue(flag: CheatFlag): CheatValue {
-    return this.flags[flag];
-  }
-
-  public toggle(flag: CheatFlag): void {
-    if (typeof this.flags[flag] === 'boolean') {
-      this.flags[flag] = !this.flags[flag];
-      console.log(`Cheat ${flag} toggled to:`, this.flags[flag]);
+    /**
+     * Toggle a cheat flag
+     */
+    toggle(flag: CheatFlag): boolean {
+        const current = this.on(flag);
+        this.set(flag, !current);
+        return !current;
     }
-  }
 
-  public resetAll(): void {
-    this.flags = {
-      [CheatFlag.GodMode]: false,
-      [CheatFlag.NoClip]: false,
-      [CheatFlag.InfiniteTime]: false,
-      [CheatFlag.GiveSword]: false,
-      [CheatFlag.SetHealth]: null
-    };
-    console.log("All cheats reset");
-  }
+    /**
+     * Set health override (null to disable)
+     */
+    setHealthOverride(health: number | null): void {
+        this.healthOverride = health;
+    }
 
-  public getActiveCheats(): CheatFlag[] {
-    return Object.entries(this.flags)
-      .filter(([_, value]) => !!value)
-      .map(([key, _]) => key as CheatFlag);
-  }
+    /**
+     * Get current health override
+     */
+    getHealthOverride(): number | null {
+        return this.healthOverride;
+    }
+
+    /**
+     * Check if health override is active
+     */
+    hasHealthOverride(): boolean {
+        return this.healthOverride !== null;
+    }
+
+    /**
+     * Get all active flags
+     */
+    getActiveFlags(): CheatFlag[] {
+        return Array.from(this.flags.entries())
+            .filter(([_, enabled]) => enabled)
+            .map(([flag, _]) => flag);
+    }
+
+    /**
+     * Reset all cheats to default state
+     */
+    reset(): void {
+        Object.values(CheatFlag).forEach(flag => {
+            const defaultValue = this.config.defaultFlags?.[flag] || false;
+            this.set(flag, defaultValue);
+        });
+        this.setHealthOverride(null);
+    }
+
+    /**
+     * Enable/disable all cheats
+     */
+    setEnabled(enabled: boolean): void {
+        this.config.enabled = enabled;
+        if (!enabled) {
+            this.reset();
+        }
+    }
+
+    /**
+     * Check if cheat system is enabled
+     */
+    isEnabled(): boolean {
+        return this.config.enabled || false;
+    }
+
+    /**
+     * Add a listener for flag changes
+     */
+    addListener(flag: CheatFlag, callback: (enabled: boolean) => void): void {
+        if (!this.listeners.has(flag)) {
+            this.listeners.set(flag, new Set());
+        }
+        this.listeners.get(flag)!.add(callback);
+    }
+
+    /**
+     * Remove a listener
+     */
+    removeListener(flag: CheatFlag, callback: (enabled: boolean) => void): void {
+        const flagListeners = this.listeners.get(flag);
+        if (flagListeners) {
+            flagListeners.delete(callback);
+        }
+    }
+
+    /**
+     * Notify all listeners for a flag
+     */
+    private notifyListeners(flag: CheatFlag, enabled: boolean): void {
+        const flagListeners = this.listeners.get(flag);
+        if (flagListeners) {
+            flagListeners.forEach(callback => {
+                try {
+                    callback(enabled);
+                } catch (error) {
+                    console.error(`Error in cheat listener for ${flag}:`, error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Get debug info for overlay
+     */
+    getDebugInfo(): Record<string, any> {
+        return {
+            enabled: this.isEnabled(),
+            activeFlags: this.getActiveFlags(),
+            healthOverride: this.healthOverride,
+            totalFlags: Object.values(CheatFlag).length
+        };
+    }
 } 

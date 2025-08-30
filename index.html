@@ -29,7 +29,37 @@
         <p>Display: <span id="displayRes">--</span></p>
         <p>Scale: <span id="scale">--</span></p>
         <p>Controls: WASD/Arrows, Space</p>
-        <p>Platform: P=Selector, Dev: F1=Debug, C=FreeCam, `=Menu</p>
+        <p>Platform: P=Selector, Dev: F1=Debug, C=FreeCam, Esc=Menu</p>
+        <p>Core: F=Fullscreen, M=Mute, `=Dev Panel, Esc=Pi Menu, D=Debug</p>
+    </div>
+    
+    <!-- Temporary dev controls for testing core features -->
+    <div id="devControls" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 1000;">
+        <h4>Core Features Test</h4>
+        <div>
+            <label>Scale Mode:</label>
+            <select id="scaleModeSelect">
+                <option value="integer">Integer</option>
+                <option value="fit">Fit</option>
+                <option value="stretch">Stretch</option>
+            </select>
+        </div>
+        <div style="margin-top: 10px;">
+            <label>Safe Area: <span id="safeAreaValue">3%</span></label><br>
+            <input type="range" id="safeAreaSlider" min="0" max="10" value="3" style="width: 100px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <label>Master Volume: <span id="masterVolumeValue">100%</span></label><br>
+            <input type="range" id="masterVolumeSlider" min="0" max="100" value="100" style="width: 100px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <button id="fullscreenBtn">Toggle Fullscreen</button>
+            <button id="muteBtn">Toggle Mute</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button id="exportSettingsBtn">Export Settings</button>
+            <button id="resetSettingsBtn">Reset Settings</button>
+        </div>
     </div>
     <canvas id="gameCanvas" tabindex="0"></canvas>
     <script type="module" src="dist/main.js"></script>
@@ -82,6 +112,152 @@
         // Update info after canvas initializes
         setTimeout(updateRetroInfo, 100);
         window.addEventListener('resize', updateRetroInfo);
+        
+        // Dev controls for testing core features
+        function setupDevControls() {
+            // Scale mode selector
+            const scaleModeSelect = document.getElementById('scaleModeSelect');
+            if (scaleModeSelect) {
+                scaleModeSelect.addEventListener('change', (e) => {
+                    const mode = e.target.value;
+                    if (window.ptsCore && window.ptsCore.settingsStore) {
+                        window.ptsCore.settingsStore.set('video.scaleMode', mode);
+                    }
+                });
+            }
+            
+            // Safe area slider
+            const safeAreaSlider = document.getElementById('safeAreaSlider');
+            const safeAreaValue = document.getElementById('safeAreaValue');
+            if (safeAreaSlider && safeAreaValue) {
+                safeAreaSlider.addEventListener('input', (e) => {
+                    const value = e.target.value;
+                    safeAreaValue.textContent = value + '%';
+                    if (window.ptsCore && window.ptsCore.settingsStore) {
+                        window.ptsCore.settingsStore.set('video.safeAreaPct', value / 100);
+                    }
+                });
+            }
+            
+            // Master volume slider
+            const masterVolumeSlider = document.getElementById('masterVolumeSlider');
+            const masterVolumeValue = document.getElementById('masterVolumeValue');
+            if (masterVolumeSlider && masterVolumeValue) {
+                masterVolumeSlider.addEventListener('input', (e) => {
+                    const value = e.target.value;
+                    masterVolumeValue.textContent = value + '%';
+                    if (window.ptsCore && window.ptsCore.settingsStore) {
+                        window.ptsCore.settingsStore.set('audio.master', value / 100);
+                    }
+                });
+            }
+            
+            // Fullscreen button
+            const fullscreenBtn = document.getElementById('fullscreenBtn');
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', () => {
+                    if (window.ptsCore && window.ptsCore.engine) {
+                        const renderer = window.ptsCore.engine.getRenderer();
+                        if (renderer.isFullscreenMode()) {
+                            renderer.exitFullscreen();
+                        } else {
+                            renderer.requestFullscreen();
+                        }
+                    }
+                });
+            }
+            
+            // Mute button
+            const muteBtn = document.getElementById('muteBtn');
+            if (muteBtn) {
+                muteBtn.addEventListener('click', () => {
+                    if (window.ptsCore && window.ptsCore.audioManager && window.ptsCore.settingsStore) {
+                        const currentMuted = window.ptsCore.audioManager.isMuted();
+                        window.ptsCore.audioManager.setMuted(!currentMuted);
+                        window.ptsCore.settingsStore.set('audio.muted', !currentMuted);
+                    }
+                });
+            }
+            
+            // Export settings button
+            const exportSettingsBtn = document.getElementById('exportSettingsBtn');
+            if (exportSettingsBtn) {
+                exportSettingsBtn.addEventListener('click', () => {
+                    if (window.ptsCore && window.ptsCore.settingsStore) {
+                        const json = window.ptsCore.settingsStore.exportJson();
+                        const blob = new Blob([json], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'pts-settings.json';
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }
+                });
+            }
+            
+            // Reset settings button
+            const resetSettingsBtn = document.getElementById('resetSettingsBtn');
+            if (resetSettingsBtn) {
+                resetSettingsBtn.addEventListener('click', () => {
+                    if (window.ptsCore && window.ptsCore.settingsStore) {
+                        if (confirm('Reset all settings to defaults?')) {
+                            window.ptsCore.settingsStore.reset();
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Setup dev controls after page loads
+        window.addEventListener('load', setupDevControls);
+        
+        // Sync dev controls with current settings
+        function syncDevControls() {
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                const settings = window.ptsCore.settingsStore.getAll();
+                
+                // Update scale mode selector
+                const scaleModeSelect = document.getElementById('scaleModeSelect');
+                if (scaleModeSelect) {
+                    scaleModeSelect.value = settings.video.scaleMode;
+                }
+                
+                // Update safe area slider
+                const safeAreaSlider = document.getElementById('safeAreaSlider');
+                const safeAreaValue = document.getElementById('safeAreaValue');
+                if (safeAreaSlider && safeAreaValue) {
+                    const safeAreaPercent = Math.round(settings.video.safeAreaPct * 100);
+                    safeAreaSlider.value = safeAreaPercent;
+                    safeAreaValue.textContent = safeAreaPercent + '%';
+                }
+                
+                // Update master volume slider
+                const masterVolumeSlider = document.getElementById('masterVolumeSlider');
+                const masterVolumeValue = document.getElementById('masterVolumeValue');
+                if (masterVolumeSlider && masterVolumeValue) {
+                    const volumePercent = Math.round(settings.audio.master * 100);
+                    masterVolumeSlider.value = volumePercent;
+                    masterVolumeValue.textContent = volumePercent + '%';
+                }
+            }
+        }
+        
+        // Sync controls when core components are ready
+        function waitForCore() {
+            if (window.ptsCore) {
+                syncDevControls();
+                // Listen for settings changes
+                if (window.ptsCore.settingsStore) {
+                    window.ptsCore.settingsStore.onChange(syncDevControls);
+                }
+            } else {
+                setTimeout(waitForCore, 100);
+            }
+        }
+        
+        // Start waiting for core components
+        setTimeout(waitForCore, 500);
     </script>
 </body>
 </html> 

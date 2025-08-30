@@ -271,14 +271,14 @@ export class BootConfigManager {
             }
             // Apply debug settings
             if (cfg.debug) {
-                engine.getDebugOverlay().enabled = true;
+                engine.getDebugOverlay().setEnabled(true);
                 console.log("Debug mode enabled");
             }
             // Apply cheats
             if (cfg.cheats && cfg.cheats.length > 0) {
                 cfg.cheats.forEach(cheatFlag => {
                     if (this.KNOWN_CHEATS.includes(cheatFlag)) {
-                        engine.getCheatManager().setCheat(cheatFlag, true);
+                        engine.getCheatManager().set(cheatFlag, true);
                         console.log(`Cheat enabled: ${cheatFlag}`);
                     }
                 });
@@ -311,12 +311,12 @@ export class BootConfigManager {
         //   params.set("level", engine.currentLevel.toString());
         // }
         // Add active cheats
-        const activeCheats = engine.getCheatManager().getActiveCheats();
+        const activeCheats = engine.getCheatManager().getActiveFlags();
         if (activeCheats.length > 0) {
             params.set("cheats", activeCheats.join(","));
         }
         // Add debug state
-        if (engine.getDebugOverlay().enabled) {
+        if (engine.getDebugOverlay().isEnabled()) {
             params.set("debug", "true");
         }
         // Add platform
@@ -358,7 +358,7 @@ export class BootConfigManager {
                 difficulty: "easy",
                 health: 100,
                 lives: 5,
-                cheats: [CheatFlag.GodMode]
+                cheats: [CheatFlag.God]
             },
             "hard": {
                 difficulty: "hard",
@@ -370,11 +370,11 @@ export class BootConfigManager {
                 difficulty: "hard",
                 skipCutscene: true,
                 debug: true,
-                cheats: [CheatFlag.NoClip]
+                cheats: [CheatFlag.Noclip]
             },
             "debug": {
                 debug: true,
-                cheats: [CheatFlag.GodMode, CheatFlag.NoClip, CheatFlag.InfiniteTime],
+                cheats: [CheatFlag.God, CheatFlag.Noclip, CheatFlag.InfTime],
                 highContrast: true
             },
             "accessibility": {

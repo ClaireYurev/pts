@@ -1,310 +1,662 @@
 export class VisualScriptEditor {
-    constructor(container) {
-        this.rules = [];
-        this.nextId = 1;
-        // Predefined events and actions
-        this.eventTypes = [
-            { name: 'onEnterRoom', description: 'When player enters a room' },
-            { name: 'onExitRoom', description: 'When player exits a room' },
-            { name: 'onPlayerDeath', description: 'When player dies' },
-            { name: 'onCollectItem', description: 'When player collects an item' },
-            { name: 'onEnemyDeath', description: 'When an enemy dies' },
-            { name: 'onTriggerActivated', description: 'When a trigger is activated' },
-            { name: 'onLevelStart', description: 'When level starts' },
-            { name: 'onLevelComplete', description: 'When level is completed' },
-            { name: 'onTimeElapsed', description: 'After a certain time has passed' },
-            { name: 'onButtonPressed', description: 'When a button is pressed' }
-        ];
-        this.actionTypes = [
-            { name: 'spawnEnemy', description: 'Spawn an enemy', parameters: ['type', 'x', 'y'] },
-            { name: 'spawnItem', description: 'Spawn an item', parameters: ['type', 'x', 'y'] },
-            { name: 'teleportPlayer', description: 'Teleport player', parameters: ['x', 'y'] },
-            { name: 'showMessage', description: 'Show a message', parameters: ['text', 'duration'] },
-            { name: 'playSound', description: 'Play a sound', parameters: ['soundFile', 'volume'] },
-            { name: 'changeLevel', description: 'Change to another level', parameters: ['levelName'] },
-            { name: 'setVariable', description: 'Set a variable', parameters: ['name', 'value'] },
-            { name: 'activateTrigger', description: 'Activate a trigger', parameters: ['triggerId'] },
-            { name: 'deactivateTrigger', description: 'Deactivate a trigger', parameters: ['triggerId'] },
-            { name: 'giveItem', description: 'Give item to player', parameters: ['itemType', 'quantity'] }
-        ];
-        this.container = container;
+    constructor(canvas) {
+        this.graph = null;
+        this.selectedNode = null;
+        this.draggingNode = null;
+        this.connectingPort = null;
+        this.hoveredNode = null;
+        this.hoveredPort = null;
+        this.nodeDefinitions = new Map();
+        this.isDragging = false;
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
+        this.panX = 0;
+        this.panY = 0;
+        this.zoom = 1;
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.initializeNodeDefinitions();
+        this.setupEventListeners();
         this.render();
     }
-    render() {
-        this.container.innerHTML = '';
-        this.container.className = 'script-editor';
-        // Add header
-        const header = document.createElement('div');
-        header.className = 'script-header';
-        header.innerHTML = `
-      <h3>Visual Script Editor</h3>
-      <button id="addRuleBtn" class="add-rule-btn">+ Add Rule</button>
-    `;
-        this.container.appendChild(header);
-        // Add rules container
-        const rulesContainer = document.createElement('div');
-        rulesContainer.className = 'rules-container';
-        this.container.appendChild(rulesContainer);
-        // Render existing rules
-        this.rules.forEach(rule => {
-            this.renderRule(rule, rulesContainer);
+    initializeNodeDefinitions() {
+        // Event nodes
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnStart',
+            name: 'On Start',
+            description: 'Triggers when the level starts',
+            icon: '▶️',
+            color: '#4CAF50',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: []
         });
-        // Add event listeners
-        this.setupEventListeners();
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnEnterRoom',
+            name: 'On Enter Room',
+            description: 'Triggers when player enters a room',
+            icon: '🚪',
+            color: '#2196F3',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'roomId', type: 'string', label: 'Room ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnPlate',
+            name: 'On Pressure Plate',
+            description: 'Triggers when pressure plate is activated',
+            icon: '⚡',
+            color: '#FF9800',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'plateId', type: 'string', label: 'Plate ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnTimer',
+            name: 'On Timer',
+            description: 'Triggers when timer expires',
+            icon: '⏰',
+            color: '#9C27B0',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'timerId', type: 'string', label: 'Timer ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnEnemyDefeated',
+            name: 'On Enemy Defeated',
+            description: 'Triggers when an enemy is defeated',
+            icon: '💀',
+            color: '#F44336',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'enemyId', type: 'string', label: 'Enemy ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnCutsceneEnd',
+            name: 'On Cutscene End',
+            description: 'Triggers when a cutscene ends',
+            icon: '🎬',
+            color: '#E91E63',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'cutsceneId', type: 'string', label: 'Cutscene ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Event',
+            kind: 'OnNoclipExit',
+            name: 'On Noclip Exit',
+            description: 'Triggers when player exits noclip mode',
+            icon: '👻',
+            color: '#607D8B',
+            inputs: [],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: []
+        });
+        // Condition nodes
+        this.addNodeDefinition({
+            type: 'Condition',
+            kind: 'HasFlag',
+            name: 'Has Flag',
+            description: 'Checks if a flag is set',
+            icon: '🏁',
+            color: '#FFC107',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [
+                { id: 'flow_true', name: 'True', type: 'flow' },
+                { id: 'flow_false', name: 'False', type: 'flow' }
+            ],
+            properties: [
+                { name: 'flagId', type: 'string', label: 'Flag ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Condition',
+            kind: 'IsEntityNear',
+            name: 'Is Entity Near',
+            description: 'Checks if an entity is near a position',
+            icon: '📍',
+            color: '#00BCD4',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [
+                { id: 'flow_true', name: 'True', type: 'flow' },
+                { id: 'flow_false', name: 'False', type: 'flow' }
+            ],
+            properties: [
+                { name: 'entityId', type: 'string', label: 'Entity ID', defaultValue: '' },
+                { name: 'position', type: 'position', label: 'Position', defaultValue: { x: 0, y: 0 } },
+                { name: 'distance', type: 'number', label: 'Distance', defaultValue: 50, min: 1, max: 500 }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Condition',
+            kind: 'TimerActive',
+            name: 'Timer Active',
+            description: 'Checks if a timer is currently active',
+            icon: '⏱️',
+            color: '#795548',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [
+                { id: 'flow_true', name: 'True', type: 'flow' },
+                { id: 'flow_false', name: 'False', type: 'flow' }
+            ],
+            properties: [
+                { name: 'timerId', type: 'string', label: 'Timer ID', defaultValue: '' }
+            ]
+        });
+        // Action nodes
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'openGate',
+            name: 'Open Gate',
+            description: 'Opens a gate',
+            icon: '🚪',
+            color: '#8BC34A',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'gateId', type: 'string', label: 'Gate ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'playCutscene',
+            name: 'Play Cutscene',
+            description: 'Plays a cutscene',
+            icon: '🎬',
+            color: '#E91E63',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'cutsceneId', type: 'string', label: 'Cutscene ID', defaultValue: '' }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'teleport',
+            name: 'Teleport',
+            description: 'Teleports an entity to a position',
+            icon: '🌀',
+            color: '#9C27B0',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'entityId', type: 'string', label: 'Entity ID', defaultValue: '' },
+                { name: 'position', type: 'position', label: 'Position', defaultValue: { x: 0, y: 0 } }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'setFlag',
+            name: 'Set Flag',
+            description: 'Sets a flag',
+            icon: '🏁',
+            color: '#FFC107',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'flagId', type: 'string', label: 'Flag ID', defaultValue: '' },
+                { name: 'value', type: 'boolean', label: 'Value', defaultValue: true }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'spawnEnemy',
+            name: 'Spawn Enemy',
+            description: 'Spawns an enemy at a position',
+            icon: '👹',
+            color: '#F44336',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'enemyType', type: 'select', label: 'Enemy Type', defaultValue: 'guard', options: ['guard', 'chopper', 'crusher'] },
+                { name: 'position', type: 'position', label: 'Position', defaultValue: { x: 0, y: 0 } }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'setTimer',
+            name: 'Set Timer',
+            description: 'Sets a timer',
+            icon: '⏰',
+            color: '#9C27B0',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'timerId', type: 'string', label: 'Timer ID', defaultValue: '' },
+                { name: 'duration', type: 'number', label: 'Duration (ms)', defaultValue: 5000, min: 100, max: 60000 }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'showText',
+            name: 'Show Text',
+            description: 'Shows text to the player',
+            icon: '💬',
+            color: '#2196F3',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'text', type: 'string', label: 'Text', defaultValue: '' },
+                { name: 'duration', type: 'number', label: 'Duration (ms)', defaultValue: 3000, min: 500, max: 10000 }
+            ]
+        });
+        this.addNodeDefinition({
+            type: 'Action',
+            kind: 'musicSwitch',
+            name: 'Music Switch',
+            description: 'Changes the background music',
+            icon: '🎵',
+            color: '#FF9800',
+            inputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            outputs: [{ id: 'flow', name: 'Flow', type: 'flow' }],
+            properties: [
+                { name: 'musicId', type: 'string', label: 'Music ID', defaultValue: '' },
+                { name: 'fadeTime', type: 'number', label: 'Fade Time (ms)', defaultValue: 1000, min: 0, max: 5000 }
+            ]
+        });
     }
-    renderRule(rule, container) {
-        const ruleElement = document.createElement('div');
-        ruleElement.className = 'rule-item';
-        ruleElement.dataset.ruleId = rule.id;
-        ruleElement.innerHTML = `
-      <div class="rule-header">
-        <label class="rule-enabled">
-          <input type="checkbox" ${rule.enabled ? 'checked' : ''}>
-          <span>Enabled</span>
-        </label>
-        <div class="rule-actions">
-          <button class="edit-rule-btn" title="Edit Rule">✏️</button>
-          <button class="delete-rule-btn" title="Delete Rule">🗑️</button>
-        </div>
-      </div>
-      <div class="rule-content">
-        <div class="rule-section">
-          <label>Event:</label>
-          <select class="event-select">
-            ${this.eventTypes.map(event => `<option value="${event.name}" ${rule.event === event.name ? 'selected' : ''}>${event.name}</option>`).join('')}
-        </div>
-        <div class="rule-section">
-          <label>Condition:</label>
-          <input type="text" class="condition-input" value="${rule.condition}" placeholder="e.g., player.health > 50">
-        </div>
-        <div class="rule-section">
-          <label>Action:</label>
-          <select class="action-select">
-            ${this.actionTypes.map(action => `<option value="${action.name}" ${rule.action === action.name ? 'selected' : ''}>${action.name}</option>`).join('')}
-        </div>
-        <div class="rule-section">
-          <label>Description:</label>
-          <input type="text" class="description-input" value="${rule.description || ''}" placeholder="Optional description">
-        </div>
-      </div>
-    `;
-        // Add event listeners for this rule
-        this.setupRuleEventListeners(ruleElement, rule);
-        container.appendChild(ruleElement);
+    addNodeDefinition(definition) {
+        const key = `${definition.type}_${definition.kind}`;
+        this.nodeDefinitions.set(key, definition);
     }
-    setupRuleEventListeners(ruleElement, rule) {
-        // Enable/disable checkbox
-        const enabledCheckbox = ruleElement.querySelector('.rule-enabled input');
-        enabledCheckbox.addEventListener('change', (e) => {
-            rule.enabled = e.target.checked;
-        });
-        // Event select
-        const eventSelect = ruleElement.querySelector('.event-select');
-        eventSelect.addEventListener('change', (e) => {
-            rule.event = e.target.value;
-        });
-        // Condition input
-        const conditionInput = ruleElement.querySelector('.condition-input');
-        conditionInput.addEventListener('input', (e) => {
-            rule.condition = e.target.value;
-        });
-        // Action select
-        const actionSelect = ruleElement.querySelector('.action-select');
-        actionSelect.addEventListener('change', (e) => {
-            rule.action = e.target.value;
-        });
-        // Description input
-        const descriptionInput = ruleElement.querySelector('.description-input');
-        descriptionInput.addEventListener('input', (e) => {
-            rule.description = e.target.value;
-        });
-        // Edit button
-        const editBtn = ruleElement.querySelector('.edit-rule-btn');
-        editBtn.addEventListener('click', () => {
-            this.editRule(rule);
-        });
-        // Delete button
-        const deleteBtn = ruleElement.querySelector('.delete-rule-btn');
-        deleteBtn.addEventListener('click', () => {
-            this.deleteRule(rule.id);
-        });
+    getNodeDefinition(type, kind) {
+        const key = `${type}_${kind}`;
+        return this.nodeDefinitions.get(key);
+    }
+    getAllNodeDefinitions() {
+        return Array.from(this.nodeDefinitions.values());
     }
     setupEventListeners() {
-        // Add rule button
-        const addRuleBtn = this.container.querySelector('#addRuleBtn');
-        if (addRuleBtn) {
-            addRuleBtn.addEventListener('click', () => {
-                this.addRule();
-            });
-        }
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this));
+        this.canvas.addEventListener('dblclick', this.handleDoubleClick.bind(this));
     }
-    addRule() {
-        const newRule = {
-            id: `rule_${this.nextId++}`,
-            event: 'onEnterRoom',
-            condition: '',
-            action: 'showMessage',
-            enabled: true,
-            description: ''
-        };
-        this.rules.push(newRule);
-        this.render();
-    }
-    deleteRule(ruleId) {
-        if (confirm('Are you sure you want to delete this rule?')) {
-            this.rules = this.rules.filter(rule => rule.id !== ruleId);
-            this.render();
-        }
-    }
-    editRule(rule) {
-        // Create a modal for editing the rule
-        const modal = document.createElement('div');
-        modal.className = 'rule-edit-modal';
-        modal.innerHTML = `
-      <div class="modal-content">
-        <h3>Edit Rule</h3>
-        <div class="form-group">
-          <label>Event:</label>
-          <select id="editEvent">
-            ${this.eventTypes.map(event => `<option value="${event.name}" ${rule.event === event.name ? 'selected' : ''}>${event.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Condition:</label>
-          <textarea id="editCondition" placeholder="Enter condition (e.g., player.health > 50)">${rule.condition}</textarea>
-        </div>
-        <div class="form-group">
-          <label>Action:</label>
-          <select id="editAction">
-            ${this.actionTypes.map(action => `<option value="${action.name}" ${rule.action === action.name ? 'selected' : ''}>${action.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Description:</label>
-          <input type="text" id="editDescription" value="${rule.description || ''}" placeholder="Optional description">
-        </div>
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="editEnabled" ${rule.enabled ? 'checked' : ''}>
-            Enabled
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button id="saveRule">Save</button>
-          <button id="cancelEdit">Cancel</button>
-        </div>
-      </div>
-    `;
-        document.body.appendChild(modal);
-        // Add event listeners
-        const saveBtn = modal.querySelector('#saveRule');
-        const cancelBtn = modal.querySelector('#cancelEdit');
-        saveBtn.addEventListener('click', () => {
-            rule.event = modal.querySelector('#editEvent').value;
-            rule.condition = modal.querySelector('#editCondition').value;
-            rule.action = modal.querySelector('#editAction').value;
-            rule.description = modal.querySelector('#editDescription').value;
-            rule.enabled = modal.querySelector('#editEnabled').checked;
-            document.body.removeChild(modal);
-            this.render();
-        });
-        cancelBtn.addEventListener('click', () => {
-            document.body.removeChild(modal);
-        });
-        // Close modal when clicking outside
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
+    handleMouseDown(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left - this.panX) / this.zoom;
+        const y = (e.clientY - rect.top - this.panY) / this.zoom;
+        this.lastMouseX = e.clientX;
+        this.lastMouseY = e.clientY;
+        if (e.button === 0) { // Left click
+            const clickedNode = this.getNodeAt(x, y);
+            const clickedPort = this.getPortAt(x, y);
+            if (clickedNode) {
+                this.selectedNode = clickedNode;
+                this.draggingNode = clickedNode;
+                this.isDragging = true;
             }
-        });
-    }
-    getRules() {
-        return this.rules.map(rule => ({ ...rule }));
-    }
-    exportRules() {
-        return this.rules.map(rule => ({ ...rule }));
-    }
-    loadRules(rules) {
-        this.rules = rules.map(rule => ({ ...rule }));
-        this.render();
-    }
-    addEventType(eventType) {
-        this.eventTypes.push(eventType);
-        this.render();
-    }
-    addActionType(actionType) {
-        this.actionTypes.push(actionType);
-        this.render();
-    }
-    getEventTypes() {
-        return this.eventTypes.map(event => ({ ...event }));
-    }
-    getActionTypes() {
-        return this.actionTypes.map(action => ({ ...action }));
-    }
-    validateRule(rule) {
-        const errors = [];
-        if (!rule.event) {
-            errors.push('Event is required');
-        }
-        if (!rule.action) {
-            errors.push('Action is required');
-        }
-        // Check if event exists
-        if (!this.eventTypes.find(e => e.name === rule.event)) {
-            errors.push(`Unknown event: ${rule.event}`);
-        }
-        // Check if action exists
-        if (!this.actionTypes.find(a => a.name === rule.action)) {
-            errors.push(`Unknown action: ${rule.action}`);
-        }
-        return { valid: errors.length === 0, errors };
-    }
-    validateAllRules() {
-        const results = [];
-        let allValid = true;
-        this.rules.forEach(rule => {
-            const validation = this.validateRule(rule);
-            if (!validation.valid) {
-                results.push({ ruleId: rule.id, errors: validation.errors });
-                allValid = false;
+            else if (clickedPort && !this.connectingPort) {
+                this.connectingPort = clickedPort;
             }
-        });
-        return { valid: allValid, errors: results };
-    }
-    clearAllRules() {
-        this.rules = [];
+            else if (this.connectingPort && clickedPort && clickedPort.nodeId !== this.connectingPort.nodeId) {
+                this.createConnection(this.connectingPort, clickedPort);
+                this.connectingPort = null;
+            }
+            else {
+                this.selectedNode = null;
+                this.connectingPort = null;
+            }
+        }
+        else if (e.button === 1) { // Middle click
+            this.isDragging = true;
+        }
         this.render();
     }
-    getRuleCount() {
-        return this.rules.length;
+    handleMouseMove(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left - this.panX) / this.zoom;
+        const y = (e.clientY - rect.top - this.panY) / this.zoom;
+        if (this.isDragging && this.draggingNode) {
+            const deltaX = (e.clientX - this.lastMouseX) / this.zoom;
+            const deltaY = (e.clientY - this.lastMouseY) / this.zoom;
+            this.draggingNode.x += deltaX;
+            this.draggingNode.y += deltaY;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+        }
+        else if (this.isDragging) {
+            const deltaX = e.clientX - this.lastMouseX;
+            const deltaY = e.clientY - this.lastMouseY;
+            this.panX += deltaX;
+            this.panY += deltaY;
+            this.lastMouseX = e.clientX;
+            this.lastMouseY = e.clientY;
+        }
+        // Update hover states
+        this.hoveredNode = this.getNodeAt(x, y);
+        this.hoveredPort = this.getPortAt(x, y);
+        this.render();
     }
-    getEnabledRules() {
-        return this.rules.filter(rule => rule.enabled);
+    handleMouseUp(e) {
+        e.preventDefault();
+        if (e.button === 0 || e.button === 1) {
+            this.isDragging = false;
+            this.draggingNode = null;
+        }
+        this.render();
     }
-    duplicateRule(ruleId) {
-        const original = this.rules.find(rule => rule.id === ruleId);
-        if (original) {
-            const duplicate = {
-                ...original,
-                id: `rule_${this.nextId++}`,
-                description: `${original.description || 'Rule'} (Copy)`
-            };
-            this.rules.push(duplicate);
-            this.render();
+    handleWheel(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.max(0.25, Math.min(4, this.zoom * zoomFactor));
+        const zoomRatio = newZoom / this.zoom;
+        this.panX = mouseX - (mouseX - this.panX) * zoomRatio;
+        this.panY = mouseY - (mouseY - this.panY) * zoomRatio;
+        this.zoom = newZoom;
+        this.render();
+    }
+    handleDoubleClick(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left - this.panX) / this.zoom;
+        const y = (e.clientY - rect.top - this.panY) / this.zoom;
+        // Open node properties dialog
+        const clickedNode = this.getNodeAt(x, y);
+        if (clickedNode) {
+            this.openNodeProperties(clickedNode);
         }
     }
-    moveRule(ruleId, direction) {
-        const index = this.rules.findIndex(rule => rule.id === ruleId);
-        if (index === -1)
+    getNodeAt(x, y) {
+        if (!this.graph)
+            return null;
+        for (let i = this.graph.nodes.length - 1; i >= 0; i--) {
+            const node = this.graph.nodes[i];
+            if (x >= node.x && x <= node.x + 120 && y >= node.y && y <= node.y + 80) {
+                return node;
+            }
+        }
+        return null;
+    }
+    getPortAt(x, y) {
+        if (!this.graph)
+            return null;
+        for (const node of this.graph.nodes) {
+            const definition = this.getNodeDefinition(node.type, node.kind);
+            if (!definition)
+                continue;
+            // Check input ports
+            for (const port of definition.inputs) {
+                const portX = node.x + 5;
+                const portY = node.y + 20 + definition.inputs.indexOf(port) * 15;
+                if (Math.abs(x - portX) < 5 && Math.abs(y - portY) < 5) {
+                    return { nodeId: node.id, portId: port.id };
+                }
+            }
+            // Check output ports
+            for (const port of definition.outputs) {
+                const portX = node.x + 115;
+                const portY = node.y + 20 + definition.outputs.indexOf(port) * 15;
+                if (Math.abs(x - portX) < 5 && Math.abs(y - portY) < 5) {
+                    return { nodeId: node.id, portId: port.id };
+                }
+            }
+        }
+        return null;
+    }
+    createConnection(from, to) {
+        if (!this.graph)
             return;
-        if (direction === 'up' && index > 0) {
-            [this.rules[index], this.rules[index - 1]] = [this.rules[index - 1], this.rules[index]];
-        }
-        else if (direction === 'down' && index < this.rules.length - 1) {
-            [this.rules[index], this.rules[index + 1]] = [this.rules[index + 1], this.rules[index]];
+        const edge = {
+            id: `edge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            from: `${from.nodeId}:${from.portId}`,
+            to: `${to.nodeId}:${to.portId}`
+        };
+        this.graph.edges.push(edge);
+    }
+    openNodeProperties(node) {
+        // This would open a properties dialog
+        console.log('Opening properties for node:', node.id);
+    }
+    loadGraph(graph) {
+        this.graph = graph;
+        this.render();
+    }
+    createGraph(name) {
+        const graph = {
+            id: `graph_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: name,
+            nodes: [],
+            edges: [],
+            variables: {}
+        };
+        this.graph = graph;
+        this.render();
+        return graph;
+    }
+    addNode(type, kind, x, y) {
+        if (!this.graph)
+            return null;
+        const definition = this.getNodeDefinition(type, kind);
+        if (!definition)
+            return null;
+        const node = {
+            id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: definition.type,
+            kind: definition.kind,
+            x: x,
+            y: y,
+            props: {}
+        };
+        // Set default properties
+        definition.properties.forEach(prop => {
+            node.props[prop.name] = prop.defaultValue;
+        });
+        this.graph.nodes.push(node);
+        this.render();
+        return node;
+    }
+    removeNode(nodeId) {
+        if (!this.graph)
+            return;
+        this.graph.nodes = this.graph.nodes.filter(node => node.id !== nodeId);
+        this.graph.edges = this.graph.edges.filter(edge => !edge.from.startsWith(nodeId + ':') && !edge.to.startsWith(nodeId + ':'));
+        if (this.selectedNode?.id === nodeId) {
+            this.selectedNode = null;
         }
         this.render();
+    }
+    getGraph() {
+        return this.graph;
+    }
+    exportGraph() {
+        if (!this.graph)
+            return '';
+        return JSON.stringify(this.graph, null, 2);
+    }
+    importGraph(json) {
+        try {
+            const graph = JSON.parse(json);
+            this.loadGraph(graph);
+        }
+        catch (error) {
+            console.error('Failed to import graph:', error);
+        }
+    }
+    render() {
+        if (!this.canvas)
+            return;
+        // Clear canvas
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Apply zoom and pan
+        this.ctx.save();
+        this.ctx.translate(this.panX, this.panY);
+        this.ctx.scale(this.zoom, this.zoom);
+        // Draw grid
+        this.drawGrid();
+        // Draw edges
+        if (this.graph) {
+            this.drawEdges();
+        }
+        // Draw nodes
+        if (this.graph) {
+            this.drawNodes();
+        }
+        // Draw connecting line
+        if (this.connectingPort) {
+            this.drawConnectingLine();
+        }
+        this.ctx.restore();
+    }
+    drawGrid() {
+        const gridSize = 20;
+        const width = this.canvas.width / this.zoom;
+        const height = this.canvas.height / this.zoom;
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+        for (let x = 0; x < width; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, height);
+            this.ctx.stroke();
+        }
+        for (let y = 0; y < height; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(width, y);
+            this.ctx.stroke();
+        }
+    }
+    drawNodes() {
+        if (!this.graph)
+            return;
+        for (const node of this.graph.nodes) {
+            this.drawNode(node);
+        }
+    }
+    drawNode(node) {
+        const definition = this.getNodeDefinition(node.type, node.kind);
+        if (!definition)
+            return;
+        const isSelected = this.selectedNode?.id === node.id;
+        const isHovered = this.hoveredNode?.id === node.id;
+        // Draw node background
+        this.ctx.fillStyle = isSelected ? '#666' : definition.color;
+        this.ctx.strokeStyle = isHovered ? '#fff' : '#333';
+        this.ctx.lineWidth = isSelected ? 3 : 2;
+        this.ctx.beginPath();
+        this.ctx.roundRect(node.x, node.y, 120, 80, 8);
+        this.ctx.fill();
+        this.ctx.stroke();
+        // Draw node title
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '12px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(definition.name, node.x + 60, node.y + 15);
+        // Draw node icon
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText(definition.icon, node.x + 15, node.y + 25);
+        // Draw ports
+        this.drawPorts(node, definition);
+    }
+    drawPorts(node, definition) {
+        // Draw input ports
+        definition.inputs.forEach((port, index) => {
+            const x = node.x + 5;
+            const y = node.y + 20 + index * 15;
+            this.ctx.fillStyle = '#fff';
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 3, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.fillStyle = '#ccc';
+            this.ctx.font = '10px Arial';
+            this.ctx.textAlign = 'left';
+            this.ctx.fillText(port.name, x + 8, y + 3);
+        });
+        // Draw output ports
+        definition.outputs.forEach((port, index) => {
+            const x = node.x + 115;
+            const y = node.y + 20 + index * 15;
+            this.ctx.fillStyle = '#fff';
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 3, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.fillStyle = '#ccc';
+            this.ctx.font = '10px Arial';
+            this.ctx.textAlign = 'right';
+            this.ctx.fillText(port.name, x - 8, y + 3);
+        });
+    }
+    drawEdges() {
+        if (!this.graph)
+            return;
+        this.ctx.strokeStyle = '#666';
+        this.ctx.lineWidth = 2;
+        for (const edge of this.graph.edges) {
+            const [fromNodeId, fromPortId] = edge.from.split(':');
+            const [toNodeId, toPortId] = edge.to.split(':');
+            const fromNode = this.graph.nodes.find(n => n.id === fromNodeId);
+            const toNode = this.graph.nodes.find(n => n.id === toNodeId);
+            if (fromNode && toNode) {
+                const fromPos = this.getPortPosition(fromNode, fromPortId, 'output');
+                const toPos = this.getPortPosition(toNode, toPortId, 'input');
+                if (fromPos && toPos) {
+                    this.drawEdge(fromPos, toPos);
+                }
+            }
+        }
+    }
+    getPortPosition(node, portId, type) {
+        const definition = this.getNodeDefinition(node.type, node.kind);
+        if (!definition)
+            return null;
+        const ports = type === 'input' ? definition.inputs : definition.outputs;
+        const index = ports.findIndex(p => p.id === portId);
+        if (index === -1)
+            return null;
+        const x = type === 'input' ? node.x + 5 : node.x + 115;
+        const y = node.y + 20 + index * 15;
+        return { x, y };
+    }
+    drawEdge(from, to) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(from.x, from.y);
+        this.ctx.lineTo(to.x, to.y);
+        this.ctx.stroke();
+    }
+    drawConnectingLine() {
+        if (!this.connectingPort || !this.graph)
+            return;
+        const node = this.graph.nodes.find(n => n.id === this.connectingPort.nodeId);
+        if (!node)
+            return;
+        const portPos = this.getPortPosition(node, this.connectingPort.portId, 'output');
+        if (!portPos)
+            return;
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = (this.lastMouseX - rect.left - this.panX) / this.zoom;
+        const mouseY = (this.lastMouseY - rect.top - this.panY) / this.zoom;
+        this.ctx.strokeStyle = '#4CAF50';
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
+        this.ctx.beginPath();
+        this.ctx.moveTo(portPos.x, portPos.y);
+        this.ctx.lineTo(mouseX, mouseY);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
     }
 }
 //# sourceMappingURL=VisualScriptEditor.js.map

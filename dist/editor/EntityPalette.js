@@ -1,217 +1,295 @@
 export class EntityPalette {
-    constructor(container, entityTypes) {
-        this.selectedEntity = "";
-        this.container = container;
-        // Convert string array to EntityType array with default properties
-        this.entities = entityTypes.map(type => ({
-            name: type,
-            color: this.getDefaultColor(type),
-            properties: this.getDefaultProperties(type)
-        }));
-        this.render();
+    constructor() {
+        this.entities = new Map();
+        this.selectedEntity = '';
+        this.initializeDefaultEntities();
     }
-    getDefaultColor(entityType) {
-        const colors = {
-            'Player': '#00FF00',
-            'Enemy': '#FF0000',
-            'Trap': '#FFA500',
-            'Collectible': '#FFFF00',
-            'NPC': '#0000FF',
-            'Door': '#8B4513',
-            'Switch': '#FF69B4',
-            'Platform': '#808080',
-            'Checkpoint': '#00FFFF',
-            'Exit': '#32CD32'
-        };
-        return colors[entityType] || '#888888';
-    }
-    getDefaultProperties(entityType) {
-        const properties = {
-            'Player': { health: 100, speed: 5 },
-            'Enemy': { health: 50, damage: 10, speed: 2 },
-            'Trap': { damage: 20, triggerType: 'touch' },
-            'Collectible': { points: 100, type: 'coin' },
-            'NPC': { dialogue: 'Hello there!', quest: null },
-            'Door': { locked: false, keyRequired: null },
-            'Switch': { activated: false, target: null },
-            'Platform': { moving: false, speed: 1 },
-            'Checkpoint': { respawnPoint: true },
-            'Exit': { nextLevel: null }
-        };
-        return properties[entityType] || {};
-    }
-    render() {
-        this.container.innerHTML = '';
-        this.container.className = 'entity-palette';
-        // Add header
-        const header = document.createElement('div');
-        header.className = 'palette-header';
-        header.textContent = 'Entities';
-        this.container.appendChild(header);
-        // Create entity list
-        const entityList = document.createElement('div');
-        entityList.className = 'entity-list';
-        this.entities.forEach(entity => {
-            const entityItem = document.createElement('div');
-            entityItem.className = 'entity-item';
-            entityItem.dataset.entityType = entity.name;
-            // Create color indicator
-            const colorIndicator = document.createElement('div');
-            colorIndicator.className = 'entity-color';
-            colorIndicator.style.backgroundColor = entity.color;
-            // Create entity info
-            const entityInfo = document.createElement('div');
-            entityInfo.className = 'entity-info';
-            const entityName = document.createElement('div');
-            entityName.className = 'entity-name';
-            entityName.textContent = entity.name;
-            const entityDesc = document.createElement('div');
-            entityDesc.className = 'entity-description';
-            entityDesc.textContent = this.getEntityDescription(entity);
-            entityInfo.appendChild(entityName);
-            entityInfo.appendChild(entityDesc);
-            entityItem.appendChild(colorIndicator);
-            entityItem.appendChild(entityInfo);
-            // Add click handler
-            entityItem.addEventListener('click', () => {
-                this.selectEntity(entity.name);
-            });
-            // Add double-click for properties
-            entityItem.addEventListener('dblclick', () => {
-                this.editEntityProperties(entity.name);
-            });
-            entityList.appendChild(entityItem);
+    initializeDefaultEntities() {
+        const defaultEntities = [
+            {
+                id: 'guard',
+                name: 'Guard',
+                icon: '🛡️',
+                color: '#FF6B6B',
+                category: 'enemies',
+                description: 'Patrolling enemy that attacks the player',
+                defaultProps: {
+                    ai: 'patrol',
+                    speed: 50,
+                    health: 100,
+                    damage: 20,
+                    patrolDistance: 100,
+                    detectionRange: 150
+                }
+            },
+            {
+                id: 'potion',
+                name: 'Potion',
+                icon: '🧪',
+                color: '#4ECDC4',
+                category: 'items',
+                description: 'Restorative item that heals the player',
+                defaultProps: {
+                    type: 'health',
+                    value: 50,
+                    respawnTime: 30000
+                }
+            },
+            {
+                id: 'sword',
+                name: 'Sword',
+                icon: '⚔️',
+                color: '#45B7D1',
+                category: 'items',
+                description: 'Weapon that increases player damage',
+                defaultProps: {
+                    damage: 30,
+                    durability: 100,
+                    range: 40
+                }
+            },
+            {
+                id: 'teleporter',
+                name: 'Teleporter',
+                icon: '🌀',
+                color: '#96CEB4',
+                category: 'mechanics',
+                description: 'Transports player to another location',
+                defaultProps: {
+                    targetId: '',
+                    oneWay: false,
+                    cooldown: 1000,
+                    particleEffect: true
+                }
+            },
+            {
+                id: 'crusher',
+                name: 'Crusher',
+                icon: '🪨',
+                color: '#FFEAA7',
+                category: 'traps',
+                description: 'Moving hazard that crushes the player',
+                defaultProps: {
+                    speed: 1,
+                    damage: 100,
+                    delay: 2000,
+                    cycleTime: 5000,
+                    direction: 'vertical'
+                }
+            },
+            {
+                id: 'pressurePlate',
+                name: 'Pressure Plate',
+                icon: '⚡',
+                color: '#DDA0DD',
+                category: 'triggers',
+                description: 'Activates when player steps on it',
+                defaultProps: {
+                    targetId: '',
+                    oneTime: false,
+                    delay: 0,
+                    requiresWeight: true
+                }
+            },
+            {
+                id: 'gate',
+                name: 'Gate',
+                icon: '🚪',
+                color: '#98D8C8',
+                category: 'mechanics',
+                description: 'Barrier that can be opened/closed',
+                defaultProps: {
+                    locked: false,
+                    keyId: '',
+                    openTime: 1000,
+                    autoClose: false,
+                    closeDelay: 5000
+                }
+            },
+            {
+                id: 'looseTile',
+                name: 'Loose Tile',
+                icon: '🧱',
+                color: '#F7DC6F',
+                category: 'traps',
+                description: 'Tile that falls when player steps on it',
+                defaultProps: {
+                    fragile: true,
+                    fallDelay: 1000,
+                    damage: 25,
+                    respawnTime: 10000
+                }
+            },
+            {
+                id: 'chopper',
+                name: 'Chopper',
+                icon: '🪓',
+                color: '#BB8FCE',
+                category: 'traps',
+                description: 'Swinging blade that damages the player',
+                defaultProps: {
+                    speed: 2,
+                    damage: 50,
+                    range: 32,
+                    swingAngle: 90,
+                    cycleTime: 3000
+                }
+            },
+            {
+                id: 'region',
+                name: 'Region',
+                icon: '📍',
+                color: '#85C1E9',
+                category: 'triggers',
+                description: 'Area that triggers events when entered',
+                defaultProps: {
+                    type: 'checkpoint',
+                    message: '',
+                    width: 32,
+                    height: 32,
+                    oneTime: true
+                }
+            },
+            {
+                id: 'key',
+                name: 'Key',
+                icon: '🔑',
+                color: '#F4D03F',
+                category: 'items',
+                description: 'Opens locked gates and doors',
+                defaultProps: {
+                    keyId: 'key_1',
+                    reusable: false,
+                    glowEffect: true
+                }
+            },
+            {
+                id: 'checkpoint',
+                name: 'Checkpoint',
+                icon: '🏁',
+                color: '#58D68D',
+                category: 'mechanics',
+                description: 'Saves player progress when touched',
+                defaultProps: {
+                    respawnPoint: true,
+                    healPlayer: true,
+                    message: 'Checkpoint reached!'
+                }
+            }
+        ];
+        defaultEntities.forEach(entity => {
+            this.entities.set(entity.id, entity);
         });
-        this.container.appendChild(entityList);
-        // Add "Add Entity" button
-        const addButton = document.createElement('button');
-        addButton.className = 'add-entity-btn';
-        addButton.textContent = '+ Add Entity Type';
-        addButton.addEventListener('click', () => {
-            this.addNewEntityType();
-        });
-        this.container.appendChild(addButton);
     }
-    getEntityDescription(entity) {
-        const descriptions = {
-            'Player': 'Main character',
-            'Enemy': 'Hostile entity',
-            'Trap': 'Harmful obstacle',
-            'Collectible': 'Item to collect',
-            'NPC': 'Non-player character',
-            'Door': 'Passage between areas',
-            'Switch': 'Activates mechanisms',
-            'Platform': 'Moving surface',
-            'Checkpoint': 'Respawn location',
-            'Exit': 'Level completion'
-        };
-        return descriptions[entity.name] || 'Custom entity';
-    }
-    selectEntity(entityType) {
-        // Remove previous selection
-        const prevSelected = this.container.querySelector('.entity-item.selected');
-        if (prevSelected) {
-            prevSelected.classList.remove('selected');
-        }
-        // Add selection to new entity
-        const newSelected = this.container.querySelector(`[data-entity-type="${entityType}"]`);
-        if (newSelected) {
-            newSelected.classList.add('selected');
-        }
-        this.selectedEntity = entityType;
-        // Call callback if provided
-        if (this.onEntitySelected) {
-            this.onEntitySelected(entityType);
+    selectEntity(entityId) {
+        if (this.entities.has(entityId)) {
+            this.selectedEntity = entityId;
         }
     }
     getSelectedEntity() {
         return this.selectedEntity;
     }
-    getEntityType(entityType) {
-        return this.entities.find(e => e.name === entityType);
+    getEntityDefinition(entityId) {
+        return this.entities.get(entityId);
     }
-    addEntityType(entityType) {
-        this.entities.push(entityType);
-        this.render();
+    getAllEntities() {
+        return Array.from(this.entities.values());
     }
-    removeEntityType(entityType) {
-        this.entities = this.entities.filter(e => e.name !== entityType);
-        if (this.selectedEntity === entityType) {
-            this.selectedEntity = "";
-        }
-        this.render();
+    getEntitiesByCategory() {
+        const categories = {};
+        this.getAllEntities().forEach(entity => {
+            if (!categories[entity.category]) {
+                categories[entity.category] = [];
+            }
+            categories[entity.category].push(entity);
+        });
+        return categories;
     }
-    updateEntityType(entityType, updates) {
-        const entity = this.entities.find(e => e.name === entityType);
+    getEntitiesInCategory(category) {
+        return this.getAllEntities().filter(entity => entity.category === category);
+    }
+    addEntity(entity) {
+        this.entities.set(entity.id, entity);
+    }
+    removeEntity(entityId) {
+        return this.entities.delete(entityId);
+    }
+    getEntityIcon(entityId) {
+        const entity = this.entities.get(entityId);
+        return entity?.icon || '?';
+    }
+    getEntityColor(entityId) {
+        const entity = this.entities.get(entityId);
+        return entity?.color || '#999';
+    }
+    getEntityName(entityId) {
+        const entity = this.entities.get(entityId);
+        return entity?.name || entityId;
+    }
+    getEntityDescription(entityId) {
+        const entity = this.entities.get(entityId);
+        return entity?.description || '';
+    }
+    getDefaultProps(entityId) {
+        const entity = this.entities.get(entityId);
+        return entity?.defaultProps || {};
+    }
+    setDefaultProps(entityId, props) {
+        const entity = this.entities.get(entityId);
         if (entity) {
-            Object.assign(entity, updates);
-            this.render();
+            entity.defaultProps = { ...entity.defaultProps, ...props };
         }
     }
-    getAllEntityTypes() {
-        return [...this.entities];
+    createCustomEntity(id, name, icon, color, category, defaultProps = {}, description = '') {
+        const entity = {
+            id,
+            name,
+            icon,
+            color,
+            category,
+            description,
+            defaultProps
+        };
+        this.addEntity(entity);
+        return entity;
     }
-    setOnEntitySelected(callback) {
-        this.onEntitySelected = callback;
+    searchEntities(query) {
+        const lowercaseQuery = query.toLowerCase();
+        return this.getAllEntities().filter(entity => entity.name.toLowerCase().includes(lowercaseQuery) ||
+            entity.id.toLowerCase().includes(lowercaseQuery) ||
+            (entity.description && entity.description.toLowerCase().includes(lowercaseQuery)));
     }
-    clearSelection() {
-        const selected = this.container.querySelector('.entity-item.selected');
-        if (selected) {
-            selected.classList.remove('selected');
-        }
-        this.selectedEntity = "";
+    getEntitySuggestions(partialId) {
+        const lowercasePartial = partialId.toLowerCase();
+        return this.getAllEntities().filter(entity => entity.id.toLowerCase().startsWith(lowercasePartial));
     }
-    addNewEntityType() {
-        const name = prompt('Enter entity type name:');
-        if (name && name.trim()) {
-            const entityType = {
-                name: name.trim(),
-                color: '#888888',
-                properties: {}
-            };
-            this.addEntityType(entityType);
-        }
-    }
-    editEntityProperties(entityType) {
-        const entity = this.getEntityType(entityType);
-        if (!entity)
-            return;
-        // Create a simple properties editor
-        const properties = entity.properties || {};
-        const propertyNames = Object.keys(properties);
-        let propertiesText = propertyNames.map(key => `${key}: ${properties[key]}`).join('\n');
-        const newPropertiesText = prompt('Edit properties (one per line, format: key: value):', propertiesText);
-        if (newPropertiesText !== null) {
-            const newProperties = {};
-            newPropertiesText.split('\n').forEach(line => {
-                const [key, value] = line.split(':').map(s => s.trim());
-                if (key && value !== undefined) {
-                    // Try to parse value as number, boolean, or keep as string
-                    if (value === 'true')
-                        newProperties[key] = true;
-                    else if (value === 'false')
-                        newProperties[key] = false;
-                    else if (!isNaN(Number(value)))
-                        newProperties[key] = Number(value);
-                    else
-                        newProperties[key] = value;
-                }
-            });
-            this.updateEntityType(entityType, { properties: newProperties });
-        }
-    }
-    exportEntityTypes() {
-        return this.entities.map(entity => ({ ...entity }));
-    }
-    importEntityTypes(entityTypes) {
-        this.entities = entityTypes.map(entity => ({ ...entity }));
-        this.render();
+    validateEntityId(entityId) {
+        // Check if entity ID is valid (alphanumeric and underscores only)
+        return /^[a-zA-Z0-9_]+$/.test(entityId) && entityId.length > 0;
     }
     getEntityCount() {
-        return this.entities.length;
+        return this.entities.size;
     }
-    isEmpty() {
-        return this.entities.length === 0;
+    getCategoryCount() {
+        const categories = new Set(this.getAllEntities().map(entity => entity.category));
+        return categories.size;
+    }
+    exportEntityDefinitions() {
+        return Object.fromEntries(this.entities);
+    }
+    importEntityDefinitions(definitions) {
+        this.entities.clear();
+        Object.entries(definitions).forEach(([id, entity]) => {
+            this.entities.set(id, entity);
+        });
+    }
+    getEntityCategories() {
+        const categories = new Set(this.getAllEntities().map(entity => entity.category));
+        return Array.from(categories).sort();
+    }
+    clear() {
+        this.entities.clear();
+        this.initializeDefaultEntities();
     }
 }
 //# sourceMappingURL=EntityPalette.js.map

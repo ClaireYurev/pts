@@ -1,5 +1,9 @@
 import { PauseManager } from "../engine/PauseManager.js";
 import { SaveManager, SaveData } from "../engine/SaveManager.js";
+import { SaveSystem } from "../engine/save/SaveSystem.js";
+import { SaveGameV1, SaveSlot } from "../engine/save/SaveTypes.js";
+import { LibraryManager, LibraryItem } from "../engine/library/LibraryManager.js";
+import { SettingsStore } from "../engine/SettingsStore.js";
 import { CheatManager, CheatFlag } from "../dev/CheatManager.js";
 import { FreeCamera } from "../dev/FreeCamera.js";
 import { DebugOverlay } from "../dev/DebugOverlay.js";
@@ -10,6 +14,9 @@ export class PiMenu {
     private overlay!: HTMLDivElement;
     private pauseManager: PauseManager;
     private saveManager: SaveManager;
+    private saveSystem?: SaveSystem;
+    private libraryManager?: LibraryManager;
+    private settingsStore?: SettingsStore;
     private currentMenu: string = "main";
     private resetConfirmationActive: boolean = false;
     private resetConfirmationTimeout: number | null = null;
@@ -23,9 +30,10 @@ export class PiMenu {
     private debugOverlay?: DebugOverlay;
     private engine?: GameEngine;
 
-    constructor(pauseManager: PauseManager, saveManager: SaveManager) {
+    constructor(pauseManager: PauseManager, saveManager: SaveManager, settingsStore?: SettingsStore) {
         this.pauseManager = pauseManager;
         this.saveManager = saveManager;
+        this.settingsStore = settingsStore;
         this.abortController = new AbortController();
         
         this.createOverlay();
@@ -44,6 +52,14 @@ export class PiMenu {
         this.debugOverlay = debugOverlay;
         this.engine = engine;
         this.createDevMenu();
+    }
+
+    public setSaveSystem(saveSystem: SaveSystem): void {
+        this.saveSystem = saveSystem;
+    }
+
+    public setLibraryManager(libraryManager: LibraryManager): void {
+        this.libraryManager = libraryManager;
     }
 
     private createOverlay(): void {
@@ -77,6 +93,7 @@ export class PiMenu {
 
     private createPiButton(): void {
         const piButton = document.createElement("button");
+        piButton.id = "piMenuButton";
         piButton.textContent = "π";
         piButton.title = "Menu";
         piButton.setAttribute("aria-label", "Open game menu");
@@ -90,7 +107,7 @@ export class PiMenu {
         piButton.style.fontFamily = "'Times New Roman', serif";
         piButton.style.fontWeight = "normal";
         piButton.style.cursor = "pointer";
-        piButton.style.zIndex = "999";
+        piButton.style.zIndex = "9999";
         piButton.style.padding = "0";
         piButton.style.margin = "0";
         piButton.style.outline = "none";
@@ -135,7 +152,7 @@ export class PiMenu {
             <button id="settingsBtn" class="menu-btn">Settings</button>
             <button id="saveBtn" class="menu-btn">Save/Load</button>
             <button id="libraryBtn" class="menu-btn">Game Library</button>
-            <button id="shareBtn" class="menu-btn" style="background-color: #0066cc; border-color: #0099ff;">Copy Share Link</button>
+            <button id="shareBtn" class="menu-btn" style="background-color: #0066cc; border-color: #0099ff;">Copy Boot Link</button>
             <button id="resetBtn" class="menu-btn" style="background-color: #8B0000; border-color: #DC143C;">Reset Game</button>
             <button id="quitBtn" class="menu-btn">Quit Game</button>
         `;
@@ -149,19 +166,70 @@ export class PiMenu {
         saveMenu.id = "saveMenu";
         saveMenu.style.display = "none";
         saveMenu.style.textAlign = "center";
-        saveMenu.style.maxWidth = "400px";
-        saveMenu.style.margin = "50px auto";
+        saveMenu.style.maxWidth = "800px";
+        saveMenu.style.margin = "20px auto";
         saveMenu.style.backgroundColor = "rgba(0,0,0,0.8)";
         saveMenu.style.padding = "20px";
         saveMenu.style.borderRadius = "10px";
         saveMenu.style.border = "2px solid #666";
+        saveMenu.style.maxHeight = "80vh";
+        saveMenu.style.overflowY = "auto";
 
         saveMenu.innerHTML = `
-            <h2 style="margin-top: 0; color: #FFF;">Save/Load</h2>
-            <button data-slot="0" class="save-slot-btn">Slot 1 - <span id="slot0Status">Empty</span></button>
-            <button data-slot="1" class="save-slot-btn">Slot 2 - <span id="slot1Status">Empty</span></button>
-            <button data-slot="2" class="save-slot-btn">Slot 3 - <span id="slot2Status">Empty</span></button>
-            <button id="backFromSaveBtn" class="menu-btn">Back</button>
+            <h2 style="margin-top: 0; color: #FFF;">Save/Load Game</h2>
+            <div id="saveSlotsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div class="save-slot-tile" data-slot="1">
+                    <div class="save-thumbnail">
+                        <img id="slot1Thumbnail" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+" alt="Empty Slot" style="width: 100%; height: 90px; object-fit: cover; border-radius: 4px;">
+                    </div>
+                    <div class="save-info">
+                        <div class="save-title">Slot 1</div>
+                        <div id="slot1Status" class="save-status">Empty</div>
+                        <div id="slot1Time" class="save-time"></div>
+                    </div>
+                    <div class="save-actions">
+                        <button class="save-action-btn save-btn" data-slot="1">Save</button>
+                        <button class="save-action-btn load-btn" data-slot="1" style="display: none;">Load</button>
+                        <button class="save-action-btn overwrite-btn" data-slot="1" style="display: none;">Overwrite</button>
+                    </div>
+                </div>
+                
+                <div class="save-slot-tile" data-slot="2">
+                    <div class="save-thumbnail">
+                        <img id="slot2Thumbnail" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+" alt="Empty Slot" style="width: 100%; height: 90px; object-fit: cover; border-radius: 4px;">
+                    </div>
+                    <div class="save-info">
+                        <div class="save-title">Slot 2</div>
+                        <div id="slot2Status" class="save-status">Empty</div>
+                        <div id="slot2Time" class="save-time"></div>
+                    </div>
+                    <div class="save-actions">
+                        <button class="save-action-btn save-btn" data-slot="2">Save</button>
+                        <button class="save-action-btn load-btn" data-slot="2" style="display: none;">Load</button>
+                        <button class="save-action-btn overwrite-btn" data-slot="2" style="display: none;">Overwrite</button>
+                    </div>
+                </div>
+                
+                <div class="save-slot-tile" data-slot="3">
+                    <div class="save-thumbnail">
+                        <img id="slot3Thumbnail" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+" alt="Empty Slot" style="width: 100%; height: 90px; object-fit: cover; border-radius: 4px;">
+                    </div>
+                    <div class="save-info">
+                        <div class="save-title">Slot 3</div>
+                        <div id="slot3Status" class="save-status">Empty</div>
+                        <div id="slot3Time" class="save-time"></div>
+                    </div>
+                    <div class="save-actions">
+                        <button class="save-action-btn save-btn" data-slot="3">Save</button>
+                        <button class="save-action-btn load-btn" data-slot="3" style="display: none;">Load</button>
+                        <button class="save-action-btn overwrite-btn" data-slot="3" style="display: none;">Overwrite</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button id="backFromSaveBtn" class="menu-btn">Back</button>
+            </div>
         `;
 
         this.overlay.appendChild(saveMenu);
@@ -173,21 +241,56 @@ export class PiMenu {
         libraryMenu.id = "libraryMenu";
         libraryMenu.style.display = "none";
         libraryMenu.style.textAlign = "center";
-        libraryMenu.style.maxWidth = "400px";
-        libraryMenu.style.margin = "50px auto";
+        libraryMenu.style.maxWidth = "900px";
+        libraryMenu.style.margin = "20px auto";
         libraryMenu.style.backgroundColor = "rgba(0,0,0,0.8)";
         libraryMenu.style.padding = "20px";
         libraryMenu.style.borderRadius = "10px";
         libraryMenu.style.border = "2px solid #666";
+        libraryMenu.style.maxHeight = "80vh";
+        libraryMenu.style.overflowY = "auto";
 
         libraryMenu.innerHTML = `
             <h2 style="margin-top: 0; color: #FFF;">Game Library</h2>
-            <div id="packList">
-                <button data-pack="packs/example.ptspack.json" class="pack-btn">Example Pack</button>
-                <button data-pack="packs/adventure.ptspack.json" class="pack-btn">Adventure Pack</button>
-                <button data-pack="packs/dungeon.ptspack.json" class="pack-btn">Dungeon Pack</button>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; justify-content: center;">
+                <button id="libraryTabBuiltin" class="library-tab-btn active">Built-in</button>
+                <button id="libraryTabInstalled" class="library-tab-btn">Installed</button>
+                <button id="libraryTabLocal" class="library-tab-btn">Local</button>
             </div>
-            <button id="backFromLibraryBtn" class="menu-btn">Back</button>
+            
+            <div id="libraryContent">
+                <div id="builtinPanel" class="library-panel active">
+                    <div id="builtinPacksList" class="packs-grid">
+                        <!-- Built-in packs will be loaded here -->
+                    </div>
+                </div>
+                
+                <div id="installedPanel" class="library-panel">
+                    <div id="installedPacksList" class="packs-grid">
+                        <!-- Installed packs will be loaded here -->
+                    </div>
+                </div>
+                
+                <div id="localPanel" class="library-panel">
+                    <div style="text-align: center; padding: 20px;">
+                        <p style="color: #CCC; margin-bottom: 15px;">Load a .ptspack.json file from your computer</p>
+                        <input type="file" id="localFileInput" accept=".ptspack.json" style="display: none;">
+                        <button id="selectLocalFileBtn" class="menu-btn">Select File</button>
+                    </div>
+                    <div id="localPacksList" class="packs-grid">
+                        <!-- Local packs will be shown here -->
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #666;">
+                <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 10px;">
+                    <button id="loadFromUrlBtn" class="menu-btn" style="background-color: #0066cc; border-color: #0099ff;">Load from URL</button>
+                    <button id="clearCacheBtn" class="menu-btn" style="background-color: #8B0000; border-color: #DC143C;">Clear Cache</button>
+                </div>
+                <button id="backFromLibraryBtn" class="menu-btn">Back</button>
+            </div>
         `;
 
         this.overlay.appendChild(libraryMenu);
@@ -199,17 +302,258 @@ export class PiMenu {
         settingsMenu.id = "settingsMenu";
         settingsMenu.style.display = "none";
         settingsMenu.style.textAlign = "center";
-        settingsMenu.style.maxWidth = "400px";
-        settingsMenu.style.margin = "50px auto";
+        settingsMenu.style.maxWidth = "600px";
+        settingsMenu.style.margin = "20px auto";
         settingsMenu.style.backgroundColor = "rgba(0,0,0,0.8)";
         settingsMenu.style.padding = "20px";
         settingsMenu.style.borderRadius = "10px";
         settingsMenu.style.border = "2px solid #666";
+        settingsMenu.style.maxHeight = "80vh";
+        settingsMenu.style.overflowY = "auto";
 
         settingsMenu.innerHTML = `
             <h2 style="margin-top: 0; color: #FFF;">Settings</h2>
-            <p style="color: #CCC;">Settings functionality coming soon!</p>
-            <button id="backFromSettingsBtn" class="menu-btn">Back</button>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; justify-content: center;">
+                <button id="settingsTabControls" class="settings-tab-btn active">Controls</button>
+                <button id="settingsTabVideo" class="settings-tab-btn">Video</button>
+                <button id="settingsTabAudio" class="settings-tab-btn">Audio</button>
+                <button id="settingsTabAccessibility" class="settings-tab-btn">Accessibility</button>
+            </div>
+            
+            <div id="settingsContent">
+                <div id="controlsPanel" class="settings-panel active">
+                    <h3 style="color: #FFF; margin-top: 0;">Controls</h3>
+                    
+                    <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                        <button id="controlsTabKeyboard" class="controls-tab-btn active">Keyboard</button>
+                        <button id="controlsTabGamepad" class="controls-tab-btn">Gamepad</button>
+                        <button id="controlsTabAccessibility" class="controls-tab-btn">Accessibility</button>
+                    </div>
+                    
+                    <div id="keyboardControls" class="controls-panel active">
+                        <h4 style="color: #FFF; margin-top: 0;">Keyboard Bindings</h4>
+                        <div style="text-align: left; color: #CCC;">
+                            <div class="binding-row">
+                                <span class="binding-label">Move Left:</span>
+                                <button class="binding-btn" data-action="Left" data-device="keyboard">A</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Right:</span>
+                                <button class="binding-btn" data-action="Right" data-device="keyboard">D</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Up:</span>
+                                <button class="binding-btn" data-action="Up" data-device="keyboard">W</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Down:</span>
+                                <button class="binding-btn" data-action="Down" data-device="keyboard">S</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Jump:</span>
+                                <button class="binding-btn" data-action="Jump" data-device="keyboard">Space</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Action:</span>
+                                <button class="binding-btn" data-action="Action" data-device="keyboard">E</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Block:</span>
+                                <button class="binding-btn" data-action="Block" data-device="keyboard">Q</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Pause:</span>
+                                <button class="binding-btn" data-action="Pause" data-device="keyboard">Escape</button>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <button id="resetKeyboardBtn" class="menu-btn" style="background-color: #666;">Reset to Defaults</button>
+                        </div>
+                    </div>
+                    
+                    <div id="gamepadControls" class="controls-panel">
+                        <h4 style="color: #FFF; margin-top: 0;">Gamepad Settings</h4>
+                        <div style="text-align: left; color: #CCC;">
+                            <div class="binding-row">
+                                <span class="binding-label">Deadzone:</span>
+                                <input type="range" id="gamepadDeadzone" min="0" max="50" value="15" style="width: 150px;">
+                                <span id="deadzoneValue">15%</span>
+                            </div>
+                            <div id="gamepadStatus" style="margin: 10px 0; padding: 10px; background: #333; border-radius: 4px;">
+                                <strong>Gamepad Status:</strong> <span id="gamepadConnected">Not Connected</span>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Left:</span>
+                                <button class="binding-btn" data-action="Left" data-device="gamepad">DPad Left</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Right:</span>
+                                <button class="binding-btn" data-action="Right" data-device="gamepad">DPad Right</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Up:</span>
+                                <button class="binding-btn" data-action="Up" data-device="gamepad">DPad Up</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Move Down:</span>
+                                <button class="binding-btn" data-action="Down" data-device="gamepad">DPad Down</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Jump:</span>
+                                <button class="binding-btn" data-action="Jump" data-device="gamepad">A Button</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Action:</span>
+                                <button class="binding-btn" data-action="Action" data-device="gamepad">B Button</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Block:</span>
+                                <button class="binding-btn" data-action="Block" data-device="gamepad">X Button</button>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">Pause:</span>
+                                <button class="binding-btn" data-action="Pause" data-device="gamepad">Start</button>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <button id="resetGamepadBtn" class="menu-btn" style="background-color: #666;">Reset to Defaults</button>
+                        </div>
+                    </div>
+                    
+                    <div id="accessibilityControls" class="controls-panel">
+                        <h4 style="color: #FFF; margin-top: 0;">Accessibility Settings</h4>
+                        <div style="text-align: left; color: #CCC;">
+                            <div class="binding-row">
+                                <span class="binding-label">Late Jump Buffer:</span>
+                                <input type="range" id="lateJumpBuffer" min="0" max="200" value="80" style="width: 150px;">
+                                <span id="lateJumpValue">80ms</span>
+                            </div>
+                            <div class="binding-row">
+                                <span class="binding-label">
+                                    <input type="checkbox" id="stickyGrab" style="margin-right: 8px;"> Sticky Grab
+                                </span>
+                            </div>
+                            <div style="margin: 10px 0; padding: 10px; background: #333; border-radius: 4px; font-size: 12px;">
+                                <strong>Late Jump Buffer:</strong> If you press Jump within this time before landing, it will execute the jump automatically.<br>
+                                <strong>Sticky Grab:</strong> While holding Action, you'll automatically grab ledges when near them.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="rebindingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+                        <div style="background: #333; padding: 30px; border-radius: 10px; text-align: center; color: #FFF;">
+                            <h3>Press any key or button...</h3>
+                            <p id="rebindingAction">Rebinding: <span id="rebindingActionName"></span></p>
+                            <button id="cancelRebindBtn" class="menu-btn" style="background-color: #666;">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="videoPanel" class="settings-panel">
+                    <h3 style="color: #FFF; margin-top: 0;">Video</h3>
+                    <div style="text-align: left;">
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Scale Mode:</label>
+                            <select id="videoScaleMode" style="width: 100%; padding: 8px; background: #333; color: #FFF; border: 1px solid #666; border-radius: 4px;">
+                                <option value="integer">Integer Scale</option>
+                                <option value="fit">Fit Screen</option>
+                                <option value="stretch">Stretch</option>
+                            </select>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="videoFullscreen" style="margin-right: 8px;"> Fullscreen
+                            </label>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Safe Area: <span id="safeAreaValue">3%</span></label>
+                            <input type="range" id="safeAreaSlider" min="0" max="10" value="3" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">FPS Cap: <span id="fpsCapValue">60</span></label>
+                            <input type="range" id="fpsCapSlider" min="30" max="120" value="60" step="30" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="videoVsync" style="margin-right: 8px;"> V-Sync
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="audioPanel" class="settings-panel">
+                    <h3 style="color: #FFF; margin-top: 0;">Audio</h3>
+                    <div style="text-align: left;">
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="audioMuted" style="margin-right: 8px;"> Mute All Audio
+                            </label>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Master Volume: <span id="masterVolumeValue">100%</span></label>
+                            <input type="range" id="masterVolumeSlider" min="0" max="100" value="100" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Music Volume: <span id="musicVolumeValue">80%</span></label>
+                            <input type="range" id="musicVolumeSlider" min="0" max="100" value="80" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">SFX Volume: <span id="sfxVolumeValue">100%</span></label>
+                            <input type="range" id="sfxVolumeSlider" min="0" max="100" value="100" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Audio Latency:</label>
+                            <select id="audioLatency" style="width: 100%; padding: 8px; background: #333; color: #FFF; border: 1px solid #666; border-radius: 4px;">
+                                <option value="auto">Auto</option>
+                                <option value="low">Low</option>
+                                <option value="compat">Compatible</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="accessibilityPanel" class="settings-panel">
+                    <h3 style="color: #FFF; margin-top: 0;">Accessibility</h3>
+                    <div style="text-align: left;">
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="accessibilityHighContrast" style="margin-right: 8px;"> High Contrast Mode
+                            </label>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="accessibilityReduceFlashes" style="margin-right: 8px;"> Reduce Flashes
+                            </label>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Late Jump Window: <span id="lateJumpValue">0ms</span></label>
+                            <input type="range" id="lateJumpSlider" min="0" max="200" value="0" step="10" style="width: 100%;">
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="accessibilityStickyGrab" style="margin-right: 8px;"> Sticky Grab
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button id="settingsResetBtn" class="menu-btn" style="background-color: #8B0000; border-color: #DC143C;">Reset to Defaults</button>
+                <button id="backFromSettingsBtn" class="menu-btn">Back</button>
+            </div>
         `;
 
         this.overlay.appendChild(settingsMenu);
@@ -386,17 +730,24 @@ export class PiMenu {
         // Back button
         const backFromSaveBtn = document.getElementById("backFromSaveBtn");
         if (backFromSaveBtn) {
-            backFromSaveBtn.onclick = () => {
+            const backHandler = () => {
                 this.showMenu("main");
             };
+            backFromSaveBtn.addEventListener('click', backHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: backFromSaveBtn, type: 'click', listener: backHandler });
         }
 
-        // Save slot buttons
-        document.querySelectorAll("#saveMenu button[data-slot]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const slot = Number((btn as HTMLElement).dataset.slot);
-                this.handleSaveSlot(slot);
-            });
+        // Save action buttons
+        document.querySelectorAll("#saveMenu .save-action-btn").forEach(btn => {
+            const actionHandler = (e: Event) => {
+                e.stopPropagation();
+                const slot = Number((btn as HTMLElement).dataset.slot) as SaveSlot;
+                const action = (btn as HTMLElement).classList.contains('save-btn') ? 'save' :
+                              (btn as HTMLElement).classList.contains('load-btn') ? 'load' : 'overwrite';
+                this.handleSaveAction(slot, action);
+            };
+            btn.addEventListener('click', actionHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: btn, type: 'click', listener: actionHandler });
         });
     }
 
@@ -404,28 +755,126 @@ export class PiMenu {
         // Back button
         const backFromSettingsBtn = document.getElementById("backFromSettingsBtn");
         if (backFromSettingsBtn) {
-            backFromSettingsBtn.onclick = () => {
+            const backHandler = () => {
                 this.showMenu("main");
             };
+            backFromSettingsBtn.addEventListener('click', backHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: backFromSettingsBtn, type: 'click', listener: backHandler });
         }
+
+        // Reset button
+        const settingsResetBtn = document.getElementById("settingsResetBtn");
+        if (settingsResetBtn) {
+            const resetHandler = () => {
+                if (confirm("Reset all settings to defaults?")) {
+                    this.resetSettingsToDefaults();
+                }
+            };
+            settingsResetBtn.addEventListener('click', resetHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: settingsResetBtn, type: 'click', listener: resetHandler });
+        }
+
+        // Tab buttons
+        const tabButtons = [
+            { id: "settingsTabControls", panel: "controlsPanel" },
+            { id: "settingsTabVideo", panel: "videoPanel" },
+            { id: "settingsTabAudio", panel: "audioPanel" },
+            { id: "settingsTabAccessibility", panel: "accessibilityPanel" }
+        ];
+
+        tabButtons.forEach(({ id, panel }) => {
+            const tabBtn = document.getElementById(id);
+            if (tabBtn) {
+                const tabHandler = () => {
+                    this.switchSettingsTab(panel);
+                };
+                tabBtn.addEventListener('click', tabHandler, { signal: this.abortController.signal });
+                this.eventListeners.push({ element: tabBtn, type: 'click', listener: tabHandler });
+            }
+        });
+
+        // Video settings
+        this.setupVideoSettingsEvents();
+        
+        // Audio settings
+        this.setupAudioSettingsEvents();
+        
+        // Accessibility settings
+        this.setupAccessibilitySettingsEvents();
+        
+        // Controls settings
+        this.setupControlsEvents();
     }
 
     private setupLibraryMenuEvents(): void {
         // Back button
         const backFromLibraryBtn = document.getElementById("backFromLibraryBtn");
         if (backFromLibraryBtn) {
-            backFromLibraryBtn.onclick = () => {
+            const backHandler = () => {
                 this.showMenu("main");
             };
+            backFromLibraryBtn.addEventListener('click', backHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: backFromLibraryBtn, type: 'click', listener: backHandler });
         }
 
-        // Pack buttons
-        document.querySelectorAll("#libraryMenu button[data-pack]").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const packFile = (btn as HTMLElement).dataset.pack!;
-                this.handlePackSelection(packFile);
-            });
+        // Tab buttons
+        const tabButtons = [
+            { id: "libraryTabBuiltin", panel: "builtinPanel" },
+            { id: "libraryTabInstalled", panel: "installedPanel" },
+            { id: "libraryTabLocal", panel: "localPanel" }
+        ];
+
+        tabButtons.forEach(({ id, panel }) => {
+            const tabBtn = document.getElementById(id);
+            if (tabBtn) {
+                const tabHandler = () => {
+                    this.switchLibraryTab(panel);
+                };
+                tabBtn.addEventListener('click', tabHandler, { signal: this.abortController.signal });
+                this.eventListeners.push({ element: tabBtn, type: 'click', listener: tabHandler });
+            }
         });
+
+        // Load from URL button
+        const loadFromUrlBtn = document.getElementById("loadFromUrlBtn");
+        if (loadFromUrlBtn) {
+            const urlHandler = () => {
+                this.handleLoadFromUrl();
+            };
+            loadFromUrlBtn.addEventListener('click', urlHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: loadFromUrlBtn, type: 'click', listener: urlHandler });
+        }
+
+        // Clear cache button
+        const clearCacheBtn = document.getElementById("clearCacheBtn");
+        if (clearCacheBtn) {
+            const clearHandler = () => {
+                this.handleClearCache();
+            };
+            clearCacheBtn.addEventListener('click', clearHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: clearCacheBtn, type: 'click', listener: clearHandler });
+        }
+
+        // Select local file button
+        const selectLocalFileBtn = document.getElementById("selectLocalFileBtn");
+        const localFileInput = document.getElementById("localFileInput") as HTMLInputElement;
+        if (selectLocalFileBtn && localFileInput) {
+            const selectHandler = () => {
+                localFileInput.click();
+            };
+            selectLocalFileBtn.addEventListener('click', selectHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: selectLocalFileBtn, type: 'click', listener: selectHandler });
+
+            // File input change handler
+            const fileHandler = (e: Event) => {
+                const target = e.target as HTMLInputElement;
+                if (target.files && target.files[0]) {
+                    this.handleLocalFileLoad(e);
+                }
+            };
+            localFileInput.addEventListener('change', fileHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: localFileInput, type: 'change', listener: fileHandler });
+        }
     }
 
     private setupDevMenuEvents(): void {
@@ -450,7 +899,7 @@ export class PiMenu {
         if (devCheatReset) {
             devCheatReset.addEventListener("click", () => {
                 if (this.cheatManager) {
-                    this.cheatManager.resetAll();
+                    this.cheatManager.reset();
                     this.updateDevActiveCheatsDisplay();
                 }
             });
@@ -462,7 +911,7 @@ export class PiMenu {
             devDebugOverlay.addEventListener("change", (e) => {
                 const target = e.target as HTMLInputElement;
                 if (this.debugOverlay) {
-                    this.debugOverlay.enabled = target.checked;
+                    this.debugOverlay.setEnabled(target.checked);
                 }
             });
         }
@@ -473,16 +922,14 @@ export class PiMenu {
             devFreeCamera.addEventListener("change", (e) => {
                 const target = e.target as HTMLInputElement;
                 if (this.freeCamera) {
-                    this.freeCamera.enabled = target.checked;
+                    this.freeCamera.setEnabled(target.checked);
                     if (!target.checked && this.engine) {
                         // Reset camera to player when disabling
                         const player = this.engine.getEntities()[0];
                         if (player) {
-                            this.freeCamera.resetToPlayer(
+                            this.freeCamera.setPosition(
                                 player.position.x,
-                                player.position.y,
-                                this.engine.canvas.width,
-                                this.engine.canvas.height
+                                player.position.y
                             );
                         }
                     }
@@ -497,15 +944,215 @@ export class PiMenu {
                 if (this.freeCamera && this.engine) {
                     const player = this.engine.getEntities()[0];
                     if (player) {
-                        this.freeCamera.resetToPlayer(
+                        this.freeCamera.setPosition(
                             player.position.x,
-                            player.position.y,
-                            this.engine.canvas.width,
-                            this.engine.canvas.height
+                            player.position.y
                         );
                     }
                 }
             });
+        }
+    }
+
+    private async handleSaveAction(slot: SaveSlot, action: 'save' | 'load' | 'overwrite'): Promise<void> {
+        try {
+            if (!this.saveSystem) {
+                console.error('SaveSystem not available');
+                return;
+            }
+
+            switch (action) {
+                case 'save':
+                    await this.performSave(slot);
+                    break;
+                case 'load':
+                    await this.performLoad(slot);
+                    break;
+                case 'overwrite':
+                    if (confirm(`Overwrite save in Slot ${slot}?`)) {
+                        await this.performSave(slot);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error(`Error handling save action ${action} for slot ${slot}:`, error);
+        }
+    }
+
+    private async performSave(slot: SaveSlot): Promise<void> {
+        if (!this.saveSystem || !this.engine) {
+            console.error('SaveSystem or Engine not available');
+            return;
+        }
+
+        try {
+            // Capture current game state
+            const saveData = await this.captureGameState();
+            
+            // Save to IndexedDB
+            await this.saveSystem.save(slot, saveData);
+            
+            // Update UI
+            await this.updateSaveSlotsDisplay();
+            
+            console.log(`Game saved to slot ${slot}`);
+        } catch (error) {
+            console.error(`Error saving to slot ${slot}:`, error);
+            alert('Failed to save game. Please try again.');
+        }
+    }
+
+    private async performLoad(slot: SaveSlot): Promise<void> {
+        if (!this.saveSystem || !this.engine) {
+            console.error('SaveSystem or Engine not available');
+            return;
+        }
+
+        try {
+            // Load from IndexedDB
+            const saveData = await this.saveSystem.load(slot);
+            
+            if (!saveData) {
+                console.error(`No save data found in slot ${slot}`);
+                return;
+            }
+
+            // Restore game state
+            await this.restoreGameState(saveData);
+            
+            // Close menu and resume game
+            this.close();
+            
+            console.log(`Game loaded from slot ${slot}`);
+        } catch (error) {
+            console.error(`Error loading from slot ${slot}:`, error);
+            alert('Failed to load game. Please try again.');
+        }
+    }
+
+    private async captureGameState(): Promise<Partial<SaveGameV1>> {
+        if (!this.engine) {
+            throw new Error('Engine not available');
+        }
+
+        // Get player entity (assuming first entity is player)
+        const entities = this.engine.getEntities();
+        const player = entities[0];
+
+        if (!player) {
+            throw new Error('Player entity not found');
+        }
+
+        // Convert inventory array to record for save format
+        const inventoryRecord: Record<string, number> = {};
+        player.inventory.forEach((item, index) => {
+            inventoryRecord[item] = (inventoryRecord[item] || 0) + 1;
+        });
+
+        return {
+            player: {
+                x: player.position.x,
+                y: player.position.y,
+                state: 'idle', // Default state since Entity doesn't have state
+                facing: 'R', // Default facing since Entity doesn't have facing
+                health: player.health,
+                maxHealth: 100, // Default max health
+                hasSword: player.hasItem('sword'),
+                inventory: inventoryRecord
+            },
+            world: {
+                timerSecRemaining: 300, // TODO: Get from game state
+                flags: {}, // TODO: Get from game state
+                looseTilesGone: [], // TODO: Get from game state
+                enemies: [] // TODO: Get from game state
+            },
+            scripting: {
+                variables: {}, // TODO: Get from game state
+                completedEvents: [] // TODO: Get from game state
+            }
+        };
+    }
+
+    private async restoreGameState(saveData: SaveGameV1): Promise<void> {
+        if (!this.engine) {
+            throw new Error('Engine not available');
+        }
+
+        // Get player entity
+        const entities = this.engine.getEntities();
+        const player = entities[0];
+
+        if (!player) {
+            throw new Error('Player entity not found');
+        }
+
+        // Restore player state
+        player.position.x = saveData.player.x;
+        player.position.y = saveData.player.y;
+        player.health = saveData.player.health;
+
+        // Convert inventory record back to array
+        const inventoryArray: string[] = [];
+        Object.entries(saveData.player.inventory).forEach(([item, count]) => {
+            for (let i = 0; i < count; i++) {
+                inventoryArray.push(item);
+            }
+        });
+        player.inventory = inventoryArray;
+
+        // TODO: Restore world state, scripting variables, etc.
+        console.log('Game state restored from save');
+    }
+
+    private async updateSaveSlotsDisplay(): Promise<void> {
+        if (!this.saveSystem) {
+            return;
+        }
+
+        try {
+            const saves = await this.saveSystem.list();
+            
+            for (let i = 0; i < 3; i++) {
+                const slot = (i + 1) as SaveSlot;
+                const save = saves[i];
+                const slotElement = document.querySelector(`[data-slot="${slot}"]`) as HTMLElement;
+                
+                if (!slotElement) continue;
+
+                const statusElement = slotElement.querySelector('.save-status') as HTMLElement;
+                const timeElement = slotElement.querySelector('.save-time') as HTMLElement;
+                const thumbnailElement = slotElement.querySelector('img') as HTMLImageElement;
+                const saveBtn = slotElement.querySelector('.save-btn') as HTMLElement;
+                const loadBtn = slotElement.querySelector('.load-btn') as HTMLElement;
+                const overwriteBtn = slotElement.querySelector('.overwrite-btn') as HTMLElement;
+
+                if (save) {
+                    // Slot has save data
+                    statusElement.textContent = `Level ${save.levelIndex}`;
+                    timeElement.textContent = new Date(save.timestamp).toLocaleString();
+                    
+                    if (save.thumbnail) {
+                        thumbnailElement.src = save.thumbnail;
+                    }
+                    
+                    saveBtn.style.display = 'none';
+                    loadBtn.style.display = 'inline-block';
+                    overwriteBtn.style.display = 'inline-block';
+                } else {
+                    // Empty slot
+                    statusElement.textContent = 'Empty';
+                    timeElement.textContent = '';
+                    
+                    // Reset to placeholder thumbnail
+                    thumbnailElement.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+";
+                    
+                    saveBtn.style.display = 'inline-block';
+                    loadBtn.style.display = 'none';
+                    overwriteBtn.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.error('Error updating save slots display:', error);
         }
     }
 
@@ -623,11 +1270,18 @@ export class PiMenu {
         const giveSword = giveSwordElement.checked;
         const health = Number(healthElement.value);
 
-        this.cheatManager.setCheat(CheatFlag.GodMode, god);
-        this.cheatManager.setCheat(CheatFlag.NoClip, noclip);
-        this.cheatManager.setCheat(CheatFlag.InfiniteTime, infTime);
-        this.cheatManager.setCheat(CheatFlag.GiveSword, giveSword);
-        this.cheatManager.setCheat(CheatFlag.SetHealth, health);
+        // Use new CheatManager API
+        this.cheatManager.set(CheatFlag.God, god);
+        this.cheatManager.set(CheatFlag.Noclip, noclip);
+        this.cheatManager.set(CheatFlag.InfTime, infTime);
+        this.cheatManager.set(CheatFlag.GiveSword, giveSword);
+        
+        // Set health override (null if 0 or invalid)
+        if (health > 0) {
+            this.cheatManager.setHealthOverride(health);
+        } else {
+            this.cheatManager.setHealthOverride(null);
+        }
 
         // Apply health immediately if set
         if (health > 0 && this.engine) {
@@ -646,7 +1300,7 @@ export class PiMenu {
         const activeCheatsDiv = document.getElementById("devActiveCheats");
         if (!activeCheatsDiv) return;
 
-        const activeCheats = this.cheatManager.getActiveCheats();
+        const activeCheats = this.cheatManager.getActiveFlags();
         
         if (activeCheats.length === 0) {
             activeCheatsDiv.textContent = "None";
@@ -679,20 +1333,20 @@ export class PiMenu {
             return;
         }
 
-        // Update checkbox states
-        elements.god!.checked = this.cheatManager.isActive(CheatFlag.GodMode);
-        elements.noclip!.checked = this.cheatManager.isActive(CheatFlag.NoClip);
-        elements.infTime!.checked = this.cheatManager.isActive(CheatFlag.InfiniteTime);
-        elements.giveSword!.checked = this.cheatManager.isActive(CheatFlag.GiveSword);
+        // Update checkbox states using new API
+        elements.god!.checked = this.cheatManager.on(CheatFlag.God);
+        elements.noclip!.checked = this.cheatManager.on(CheatFlag.Noclip);
+        elements.infTime!.checked = this.cheatManager.on(CheatFlag.InfTime);
+        elements.giveSword!.checked = this.cheatManager.on(CheatFlag.GiveSword);
         
-        const healthValue = this.cheatManager.getValue(CheatFlag.SetHealth);
+        const healthValue = this.cheatManager.getHealthOverride();
         if (healthValue !== null) {
             elements.health!.value = healthValue.toString();
         }
 
         // Sync debug tools
-        elements.debugOverlay!.checked = this.debugOverlay.enabled;
-        elements.freeCamera!.checked = this.freeCamera.enabled;
+        elements.debugOverlay!.checked = this.debugOverlay.isEnabled();
+        elements.freeCamera!.checked = this.freeCamera.isEnabled();
     }
 
     private saveGame(slot: number): void {
@@ -789,6 +1443,16 @@ export class PiMenu {
                 this.updateDevActiveCheatsDisplay();
                 this.syncDevCheckboxes();
             }
+
+            // Load settings if showing settings menu
+            if (menuName === "settings") {
+                this.loadSettingsFromStore();
+            }
+
+            // Update save slots if showing save menu
+            if (menuName === "save") {
+                this.updateSaveSlotsDisplay();
+            }
         } catch (error) {
             console.error("Error showing menu:", error);
         }
@@ -796,8 +1460,8 @@ export class PiMenu {
 
     private setupKeyboardShortcuts(): void {
         const keydownHandler = (e: KeyboardEvent) => {
-            // Only open menu with P key if menu is currently closed
-            if (e.code === "KeyP" && (this.overlay.style.display === "none" || !this.overlay.style.display)) {
+            // Toggle menu with P key or Escape key
+            if ((e.code === "KeyP" || e.code === "Escape") && (this.overlay.style.display === "none" || !this.overlay.style.display)) {
                 this.toggle();
             }
             
@@ -807,7 +1471,7 @@ export class PiMenu {
                 this.openDevMenu();
             }
             
-            // Accessibility: Escape key to close menu
+            // Close menu with Escape key when menu is open
             if (e.code === "Escape" && this.overlay.style.display !== "none") {
                 this.close();
             }
@@ -881,10 +1545,554 @@ export class PiMenu {
         }
         
         try {
-            return await BootConfigManager.copyShareUrl(this.engine);
+            return await this.copyBootLink();
         } catch (error) {
-            console.error("Error copying share URL:", error);
+            console.error("Error copying boot link:", error);
             return false;
+        }
+    }
+
+    private async copyBootLink(): Promise<boolean> {
+        try {
+            const bootUrl = this.generateBootLink();
+            await navigator.clipboard.writeText(bootUrl);
+            console.log("Boot link copied to clipboard:", bootUrl);
+            return true;
+        } catch (error) {
+            console.error("Failed to copy boot link:", error);
+            return false;
+        }
+    }
+
+    private generateBootLink(): string {
+        const params = new URLSearchParams();
+        
+        // Get current game state
+        const player = this.engine?.getEntities()[0];
+        const currentPlatform = this.engine?.getCurrentPlatform();
+        const renderer = this.engine?.getRenderer();
+        const cheatManager = this.engine?.getCheatManager();
+        const settings = this.settingsStore?.getAll();
+        
+        // Add pack if different from default
+        if (currentPlatform?.name.toLowerCase() !== 'snes') {
+            params.set("pack", currentPlatform?.name.toLowerCase().replace(/\s+/g, "-") || "snes");
+        }
+        
+        // Add level if not 1 (default)
+        // TODO: Get current level from engine
+        // if (currentLevel && currentLevel !== 1) {
+        //     params.set("level", currentLevel.toString());
+        // }
+        
+        // Add player position if not at default
+        if (player) {
+            if (player.position.x !== 0) {
+                params.set("x", Math.floor(player.position.x).toString());
+            }
+            if (player.position.y !== 0) {
+                params.set("y", Math.floor(player.position.y).toString());
+            }
+            if (player.health !== 100) {
+                params.set("health", player.health.toString());
+            }
+        }
+        
+        // Add active cheats
+        if (cheatManager) {
+            const activeCheats = cheatManager.getActiveFlags();
+            if (activeCheats.includes(CheatFlag.Noclip)) params.set("noclip", "1");
+            if (activeCheats.includes(CheatFlag.God)) params.set("god", "1");
+            if (activeCheats.includes(CheatFlag.InfTime)) params.set("infTime", "1");
+            if (activeCheats.includes(CheatFlag.GiveSword)) params.set("givesword", "1");
+        }
+        
+        // Add video settings if different from defaults
+        if (renderer) {
+            const scaleMode = renderer.getScaleMode();
+            if (scaleMode !== 'integer') {
+                params.set("scale", scaleMode);
+            }
+            
+            if (document.fullscreenElement) {
+                params.set("fullscreen", "1");
+            }
+        }
+        
+        // Add audio settings if different from defaults
+        if (settings) {
+            if (settings.audio.muted) {
+                params.set("mute", "1");
+            }
+            if (settings.audio.master !== 1.0) {
+                params.set("vol", settings.audio.master.toFixed(2));
+            }
+            if (settings.audio.music !== 0.8) {
+                params.set("music", settings.audio.music ? "1" : "0");
+            }
+            if (settings.audio.sfx !== 1.0) {
+                params.set("sfx", settings.audio.sfx ? "1" : "0");
+            }
+            if (settings.audio.latency !== 'auto') {
+                params.set("latency", settings.audio.latency);
+            }
+        }
+        
+        // Add input settings if different from defaults
+        if (settings?.accessibility) {
+            if (settings.accessibility.lateJumpMs > 0) {
+                params.set("jumpbuf", settings.accessibility.lateJumpMs.toString());
+            }
+            if (settings.accessibility.stickyGrab) {
+                params.set("sticky", "1");
+            }
+        }
+        
+        // Add accessibility settings if different from defaults
+        if (settings?.accessibility) {
+            if (settings.accessibility.highContrast) {
+                params.set("hud", "0"); // High contrast often means simplified HUD
+            }
+        }
+        
+        // Add language if not English
+        if (settings?.lang && settings.lang !== 'en') {
+            params.set("lang", settings.lang);
+        }
+        
+        // Add cutscenes setting if disabled
+        // TODO: Get current cutscene state
+        // if (cutscenesDisabled) {
+        //     params.set("cutscenes", "0");
+        // }
+        
+        return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    }
+
+    private switchSettingsTab(panelId: string): void {
+        // Hide all panels
+        const panels = ['controlsPanel', 'videoPanel', 'audioPanel', 'accessibilityPanel'];
+        panels.forEach(id => {
+            const panel = document.getElementById(id);
+            if (panel) {
+                panel.classList.remove('active');
+            }
+        });
+
+        // Remove active class from all tab buttons
+        const tabButtons = ['settingsTabControls', 'settingsTabVideo', 'settingsTabAudio', 'settingsTabAccessibility'];
+        tabButtons.forEach(id => {
+            const tab = document.getElementById(id);
+            if (tab) {
+                tab.classList.remove('active');
+            }
+        });
+
+        // Show selected panel
+        const targetPanel = document.getElementById(panelId);
+        if (targetPanel) {
+            targetPanel.classList.add('active');
+        }
+
+        // Activate corresponding tab button
+        const tabId = `settingsTab${panelId.charAt(0).toUpperCase() + panelId.slice(1).replace('Panel', '')}`;
+        const targetTab = document.getElementById(tabId);
+        if (targetTab) {
+            targetTab.classList.add('active');
+        }
+    }
+
+    private setupVideoSettingsEvents(): void {
+        // Scale mode
+        const scaleModeSelect = document.getElementById('videoScaleMode') as HTMLSelectElement;
+        if (scaleModeSelect) {
+            const scaleHandler = () => {
+                const value = scaleModeSelect.value as 'integer' | 'fit' | 'stretch';
+                this.updateSetting('video.scaleMode', value);
+            };
+            scaleModeSelect.addEventListener('change', scaleHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: scaleModeSelect, type: 'change', listener: scaleHandler });
+        }
+
+        // Fullscreen
+        const fullscreenCheckbox = document.getElementById('videoFullscreen') as HTMLInputElement;
+        if (fullscreenCheckbox) {
+            const fullscreenHandler = () => {
+                this.updateSetting('video.fullscreen', fullscreenCheckbox.checked);
+            };
+            fullscreenCheckbox.addEventListener('change', fullscreenHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: fullscreenCheckbox, type: 'change', listener: fullscreenHandler });
+        }
+
+        // Safe area slider
+        const safeAreaSlider = document.getElementById('safeAreaSlider') as HTMLInputElement;
+        const safeAreaValue = document.getElementById('safeAreaValue');
+        if (safeAreaSlider && safeAreaValue) {
+            const safeAreaHandler = () => {
+                const value = Number(safeAreaSlider.value) / 100;
+                safeAreaValue.textContent = `${safeAreaSlider.value}%`;
+                this.updateSetting('video.safeAreaPct', value);
+            };
+            safeAreaSlider.addEventListener('input', safeAreaHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: safeAreaSlider, type: 'input', listener: safeAreaHandler });
+        }
+
+        // FPS cap slider
+        const fpsCapSlider = document.getElementById('fpsCapSlider') as HTMLInputElement;
+        const fpsCapValue = document.getElementById('fpsCapValue');
+        if (fpsCapSlider && fpsCapValue) {
+            const fpsCapHandler = () => {
+                const value = Number(fpsCapSlider.value);
+                fpsCapValue.textContent = value.toString();
+                this.updateSetting('video.fpsCap', value);
+            };
+            fpsCapSlider.addEventListener('input', fpsCapHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: fpsCapSlider, type: 'input', listener: fpsCapHandler });
+        }
+
+        // V-Sync
+        const vsyncCheckbox = document.getElementById('videoVsync') as HTMLInputElement;
+        if (vsyncCheckbox) {
+            const vsyncHandler = () => {
+                this.updateSetting('video.vsync', vsyncCheckbox.checked);
+            };
+            vsyncCheckbox.addEventListener('change', vsyncHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: vsyncCheckbox, type: 'change', listener: vsyncHandler });
+        }
+    }
+
+    private setupAudioSettingsEvents(): void {
+        // Mute checkbox
+        const mutedCheckbox = document.getElementById('audioMuted') as HTMLInputElement;
+        if (mutedCheckbox) {
+            const mutedHandler = () => {
+                this.updateSetting('audio.muted', mutedCheckbox.checked);
+            };
+            mutedCheckbox.addEventListener('change', mutedHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: mutedCheckbox, type: 'change', listener: mutedHandler });
+        }
+
+        // Master volume
+        const masterVolumeSlider = document.getElementById('masterVolumeSlider') as HTMLInputElement;
+        const masterVolumeValue = document.getElementById('masterVolumeValue');
+        if (masterVolumeSlider && masterVolumeValue) {
+            const masterVolumeHandler = () => {
+                const value = Number(masterVolumeSlider.value) / 100;
+                masterVolumeValue.textContent = `${masterVolumeSlider.value}%`;
+                this.updateSetting('audio.master', value);
+            };
+            masterVolumeSlider.addEventListener('input', masterVolumeHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: masterVolumeSlider, type: 'input', listener: masterVolumeHandler });
+        }
+
+        // Music volume
+        const musicVolumeSlider = document.getElementById('musicVolumeSlider') as HTMLInputElement;
+        const musicVolumeValue = document.getElementById('musicVolumeValue');
+        if (musicVolumeSlider && musicVolumeValue) {
+            const musicVolumeHandler = () => {
+                const value = Number(musicVolumeSlider.value) / 100;
+                musicVolumeValue.textContent = `${musicVolumeSlider.value}%`;
+                this.updateSetting('audio.music', value);
+            };
+            musicVolumeSlider.addEventListener('input', musicVolumeHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: musicVolumeSlider, type: 'input', listener: musicVolumeHandler });
+        }
+
+        // SFX volume
+        const sfxVolumeSlider = document.getElementById('sfxVolumeSlider') as HTMLInputElement;
+        const sfxVolumeValue = document.getElementById('sfxVolumeValue');
+        if (sfxVolumeSlider && sfxVolumeValue) {
+            const sfxVolumeHandler = () => {
+                const value = Number(sfxVolumeSlider.value) / 100;
+                sfxVolumeValue.textContent = `${sfxVolumeSlider.value}%`;
+                this.updateSetting('audio.sfx', value);
+            };
+            sfxVolumeSlider.addEventListener('input', sfxVolumeHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: sfxVolumeSlider, type: 'input', listener: sfxVolumeHandler });
+        }
+
+        // Audio latency
+        const audioLatencySelect = document.getElementById('audioLatency') as HTMLSelectElement;
+        if (audioLatencySelect) {
+            const audioLatencyHandler = () => {
+                const value = audioLatencySelect.value as 'auto' | 'low' | 'compat';
+                this.updateSetting('audio.latency', value);
+            };
+            audioLatencySelect.addEventListener('change', audioLatencyHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: audioLatencySelect, type: 'change', listener: audioLatencyHandler });
+        }
+    }
+
+    private setupAccessibilitySettingsEvents(): void {
+        // High contrast
+        const highContrastCheckbox = document.getElementById('accessibilityHighContrast') as HTMLInputElement;
+        if (highContrastCheckbox) {
+            const highContrastHandler = () => {
+                this.updateSetting('accessibility.highContrast', highContrastCheckbox.checked);
+                this.applyHighContrastMode(highContrastCheckbox.checked);
+            };
+            highContrastCheckbox.addEventListener('change', highContrastHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: highContrastCheckbox, type: 'change', listener: highContrastHandler });
+        }
+
+        // Reduce flashes
+        const reduceFlashesCheckbox = document.getElementById('accessibilityReduceFlashes') as HTMLInputElement;
+        if (reduceFlashesCheckbox) {
+            const reduceFlashesHandler = () => {
+                this.updateSetting('accessibility.reduceFlashes', reduceFlashesCheckbox.checked);
+            };
+            reduceFlashesCheckbox.addEventListener('change', reduceFlashesHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: reduceFlashesCheckbox, type: 'change', listener: reduceFlashesHandler });
+        }
+
+        // Late jump slider
+        const lateJumpSlider = document.getElementById('lateJumpSlider') as HTMLInputElement;
+        const lateJumpValue = document.getElementById('lateJumpValue');
+        if (lateJumpSlider && lateJumpValue) {
+            const lateJumpHandler = () => {
+                const value = Number(lateJumpSlider.value);
+                lateJumpValue.textContent = `${value}ms`;
+                this.updateSetting('accessibility.lateJumpMs', value);
+            };
+            lateJumpSlider.addEventListener('input', lateJumpHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: lateJumpSlider, type: 'input', listener: lateJumpHandler });
+        }
+
+        // Sticky grab
+        const stickyGrabCheckbox = document.getElementById('accessibilityStickyGrab') as HTMLInputElement;
+        if (stickyGrabCheckbox) {
+            const stickyGrabHandler = () => {
+                this.updateSetting('accessibility.stickyGrab', stickyGrabCheckbox.checked);
+            };
+            stickyGrabCheckbox.addEventListener('change', stickyGrabHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: stickyGrabCheckbox, type: 'change', listener: stickyGrabHandler });
+        }
+    }
+
+    private updateSetting<T>(path: string, value: T): void {
+        console.log(`Setting ${path} = ${value}`);
+        
+        // Save to SettingsStore if available
+        if (this.settingsStore) {
+            this.settingsStore.set(path, value);
+        }
+        
+        // Apply immediate effects for certain settings
+        if (path === 'accessibility.highContrast') {
+            this.applyHighContrastMode(value as boolean);
+        }
+        
+        // Apply video settings immediately if engine is available
+        if (this.engine && path.startsWith('video.')) {
+            this.applyVideoSettings(path, value);
+        }
+    }
+
+    private applyVideoSettings(path: string, value: any): void {
+        // Apply video settings to the engine/renderer
+        if (path === 'video.fullscreen' && typeof value === 'boolean') {
+            // TODO: Implement fullscreen toggle
+            console.log('Fullscreen setting changed:', value);
+        }
+        
+        if (path === 'video.scaleMode' && typeof value === 'string') {
+            // TODO: Apply scale mode to renderer
+            console.log('Scale mode changed:', value);
+        }
+        
+        if (path === 'video.fpsCap' && typeof value === 'number') {
+            // TODO: Apply FPS cap to game loop
+            console.log('FPS cap changed:', value);
+        }
+    }
+
+    private applyHighContrastMode(enabled: boolean): void {
+        if (enabled) {
+            document.body.classList.add('high-contrast');
+        } else {
+            document.body.classList.remove('high-contrast');
+        }
+    }
+
+    private resetSettingsToDefaults(): void {
+        // Reset all form elements to defaults
+        const elements = {
+            // Video
+            videoScaleMode: 'integer',
+            videoFullscreen: false,
+            safeAreaSlider: 3,
+            fpsCapSlider: 60,
+            videoVsync: true,
+            
+            // Audio
+            audioMuted: false,
+            masterVolumeSlider: 100,
+            musicVolumeSlider: 80,
+            sfxVolumeSlider: 100,
+            audioLatency: 'auto',
+            
+            // Accessibility
+            accessibilityHighContrast: false,
+            accessibilityReduceFlashes: false,
+            lateJumpSlider: 0,
+            accessibilityStickyGrab: false
+        };
+
+        // Update form elements
+        Object.entries(elements).forEach(([id, defaultValue]) => {
+            const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement;
+            if (element) {
+                if (element.type === 'checkbox') {
+                    (element as HTMLInputElement).checked = defaultValue as boolean;
+                } else if (element.type === 'range') {
+                    element.value = defaultValue.toString();
+                    // Update the display value
+                    const valueElement = document.getElementById(id.replace('Slider', 'Value'));
+                    if (valueElement) {
+                        if (id.includes('Volume')) {
+                            valueElement.textContent = `${defaultValue}%`;
+                        } else if (id === 'safeAreaSlider') {
+                            valueElement.textContent = `${defaultValue}%`;
+                        } else if (id === 'fpsCapSlider') {
+                            valueElement.textContent = defaultValue.toString();
+                        } else if (id === 'lateJumpSlider') {
+                            valueElement.textContent = `${defaultValue}ms`;
+                        }
+                    }
+                } else if (element.tagName === 'SELECT') {
+                    element.value = defaultValue as string;
+                }
+            }
+        });
+
+        // Apply the reset settings
+        this.updateSetting('video.scaleMode', 'integer');
+        this.updateSetting('video.fullscreen', false);
+        this.updateSetting('video.safeAreaPct', 0.03);
+        this.updateSetting('video.fpsCap', 60);
+        this.updateSetting('video.vsync', true);
+        this.updateSetting('audio.master', 1.0);
+        this.updateSetting('audio.music', 0.8);
+        this.updateSetting('audio.sfx', 1.0);
+        this.updateSetting('audio.muted', false);
+        this.updateSetting('audio.latency', 'auto');
+        this.updateSetting('accessibility.highContrast', false);
+        this.updateSetting('accessibility.reduceFlashes', false);
+        this.updateSetting('accessibility.lateJumpMs', 0);
+        this.updateSetting('accessibility.stickyGrab', false);
+
+        // Remove high contrast mode
+        this.applyHighContrastMode(false);
+
+        console.log('Settings reset to defaults');
+    }
+
+    private loadSettingsFromStore(): void {
+        if (!this.settingsStore) {
+            console.warn('SettingsStore not available, using defaults');
+            return;
+        }
+
+        try {
+            // Load video settings
+            const scaleMode = this.settingsStore.get<string>('video.scaleMode');
+            const fullscreen = this.settingsStore.get<boolean>('video.fullscreen');
+            const safeAreaPct = this.settingsStore.get<number>('video.safeAreaPct');
+            const fpsCap = this.settingsStore.get<number>('video.fpsCap');
+            const vsync = this.settingsStore.get<boolean>('video.vsync');
+
+            // Load audio settings
+            const masterVolume = this.settingsStore.get<number>('audio.master');
+            const musicVolume = this.settingsStore.get<number>('audio.music');
+            const sfxVolume = this.settingsStore.get<number>('audio.sfx');
+            const muted = this.settingsStore.get<boolean>('audio.muted');
+            const latency = this.settingsStore.get<string>('audio.latency');
+
+            // Load accessibility settings
+            const highContrast = this.settingsStore.get<boolean>('accessibility.highContrast');
+            const reduceFlashes = this.settingsStore.get<boolean>('accessibility.reduceFlashes');
+            const lateJumpMs = this.settingsStore.get<number>('accessibility.lateJumpMs');
+            const stickyGrab = this.settingsStore.get<boolean>('accessibility.stickyGrab');
+
+            // Update form elements
+            this.updateFormElement('videoScaleMode', scaleMode);
+            this.updateFormElement('videoFullscreen', fullscreen);
+            this.updateFormElement('safeAreaSlider', safeAreaPct ? Math.round(safeAreaPct * 100) : 3);
+            this.updateFormElement('fpsCapSlider', fpsCap || 60);
+            this.updateFormElement('videoVsync', vsync);
+            this.updateFormElement('audioMuted', muted);
+            this.updateFormElement('masterVolumeSlider', masterVolume ? Math.round(masterVolume * 100) : 100);
+            this.updateFormElement('musicVolumeSlider', musicVolume ? Math.round(musicVolume * 100) : 80);
+            this.updateFormElement('sfxVolumeSlider', sfxVolume ? Math.round(sfxVolume * 100) : 100);
+            this.updateFormElement('audioLatency', latency);
+            this.updateFormElement('accessibilityHighContrast', highContrast);
+            this.updateFormElement('accessibilityReduceFlashes', reduceFlashes);
+            this.updateFormElement('lateJumpSlider', lateJumpMs || 0);
+            this.updateFormElement('accessibilityStickyGrab', stickyGrab);
+
+            // Update display values
+            this.updateDisplayValues();
+
+            // Apply high contrast mode
+            this.applyHighContrastMode(highContrast || false);
+
+            console.log('Settings loaded from store');
+        } catch (error) {
+            console.error('Error loading settings from store:', error);
+        }
+    }
+
+    private updateFormElement(id: string, value: any): void {
+        const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement;
+        if (!element) {
+            console.warn(`Form element not found: ${id}`);
+            return;
+        }
+
+        if (element.type === 'checkbox') {
+            (element as HTMLInputElement).checked = Boolean(value);
+        } else if (element.type === 'range') {
+            element.value = String(value);
+        } else if (element.tagName === 'SELECT') {
+            element.value = String(value);
+        }
+    }
+
+    private updateDisplayValues(): void {
+        // Update safe area display
+        const safeAreaSlider = document.getElementById('safeAreaSlider') as HTMLInputElement;
+        const safeAreaValue = document.getElementById('safeAreaValue');
+        if (safeAreaSlider && safeAreaValue) {
+            safeAreaValue.textContent = `${safeAreaSlider.value}%`;
+        }
+
+        // Update FPS cap display
+        const fpsCapSlider = document.getElementById('fpsCapSlider') as HTMLInputElement;
+        const fpsCapValue = document.getElementById('fpsCapValue');
+        if (fpsCapSlider && fpsCapValue) {
+            fpsCapValue.textContent = fpsCapSlider.value;
+        }
+
+        // Update volume displays
+        const volumeSliders = [
+            { slider: 'masterVolumeSlider', value: 'masterVolumeValue' },
+            { slider: 'musicVolumeSlider', value: 'musicVolumeValue' },
+            { slider: 'sfxVolumeSlider', value: 'sfxVolumeValue' }
+        ];
+
+        volumeSliders.forEach(({ slider, value }) => {
+            const sliderElement = document.getElementById(slider) as HTMLInputElement;
+            const valueElement = document.getElementById(value);
+            if (sliderElement && valueElement) {
+                valueElement.textContent = `${sliderElement.value}%`;
+            }
+        });
+
+        // Update late jump display
+        const lateJumpSlider = document.getElementById('lateJumpSlider') as HTMLInputElement;
+        const lateJumpValue = document.getElementById('lateJumpValue');
+        if (lateJumpSlider && lateJumpValue) {
+            lateJumpValue.textContent = `${lateJumpSlider.value}ms`;
         }
     }
 
@@ -911,5 +2119,520 @@ export class PiMenu {
         this.eventListeners = [];
         
         console.log("PiMenu cleanup completed");
+    }
+
+    public updateZIndexForFullscreen(isFullscreen: boolean): void {
+        const piButton = document.getElementById('piMenuButton') as HTMLElement;
+        if (piButton) {
+            piButton.style.zIndex = isFullscreen ? '9999' : '999';
+            console.log(`PiMenu button z-index updated to ${isFullscreen ? '9999' : '999'}`);
+        } else {
+            console.warn('PiMenu button not found in updateZIndexForFullscreen');
+        }
+        
+        if (this.overlay) {
+            this.overlay.style.zIndex = isFullscreen ? '9999' : '1000';
+            console.log(`PiMenu overlay z-index updated to ${isFullscreen ? '9999' : '1000'}`);
+        }
+        
+        console.log(`PiMenu z-index updated for fullscreen: ${isFullscreen}`);
+    }
+
+    private switchLibraryTab(panelId: string): void {
+        // Hide all library panels and deactivate all tabs
+        const panels = ['builtin-panel', 'installed-panel', 'local-panel'];
+        const tabs = ['builtin-tab', 'installed-tab', 'local-tab'];
+        
+        panels.forEach(panel => {
+          const element = this.overlay.querySelector(`#${panel}`);
+          if (element) element.classList.remove('active');
+        });
+        
+        tabs.forEach(tab => {
+          const element = this.overlay.querySelector(`#${tab}`);
+          if (element) element.classList.remove('active');
+        });
+        
+        // Show selected panel and activate its tab
+        const selectedPanel = this.overlay.querySelector(`#${panelId}`);
+        const selectedTab = this.overlay.querySelector(`#${panelId.replace('-panel', '-tab')}`);
+        
+        if (selectedPanel) selectedPanel.classList.add('active');
+        if (selectedTab) selectedTab.classList.add('active');
+        
+        // Update display for the selected panel
+        this.updateLibraryDisplay(panelId);
+    }
+
+    private async handleLoadFromUrl(): Promise<void> {
+        const url = prompt('Enter the URL of a .ptspack.json file:');
+        if (!url) return;
+        
+        if (!url.startsWith('https://')) {
+          alert('Only HTTPS URLs are allowed for security reasons.');
+          return;
+        }
+        
+        try {
+          if (!this.libraryManager) {
+            alert('Library manager not available.');
+            return;
+          }
+          
+          await this.libraryManager.loadPackFromUrl(url);
+          this.updateLibraryDisplay('installed-panel');
+          alert('Pack loaded successfully!');
+        } catch (error) {
+          console.error('Failed to load pack from URL:', error);
+          alert(`Failed to load pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async handleClearCache(): Promise<void> {
+        if (!confirm('This will clear all cached packs and assets. Continue?')) {
+          return;
+        }
+        
+        try {
+          if (this.libraryManager) {
+            await this.libraryManager.clearCache();
+          }
+          this.updateLibraryDisplay('installed-panel');
+          alert('Cache cleared successfully!');
+        } catch (error) {
+          console.error('Failed to clear cache:', error);
+          alert(`Failed to clear cache: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async handleLocalFileLoad(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        
+        if (!file) return;
+        
+        if (!file.name.endsWith('.ptspack.json')) {
+          alert('Please select a .ptspack.json file.');
+          return;
+        }
+        
+        try {
+          if (!this.libraryManager) {
+            alert('Library manager not available.');
+            return;
+          }
+          
+          await this.libraryManager.loadPackFromFile(file);
+          this.updateLibraryDisplay('local-panel');
+          alert('Local pack loaded successfully!');
+        } catch (error) {
+          console.error('Failed to load local pack:', error);
+          alert(`Failed to load pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        // Clear the input
+        input.value = '';
+    }
+
+    private async updateLibraryDisplay(panelId: string): Promise<void> {
+        if (!this.libraryManager) return;
+        
+        const items = await this.libraryManager.getLibraryItems();
+        const currentPack = await this.libraryManager.getCurrentPack();
+        
+        // Update built-in packs
+        if (panelId === 'builtin-panel') {
+          const builtinList = this.overlay.querySelector('#builtinPacksList') as HTMLElement;
+          if (builtinList) {
+            builtinList.innerHTML = '';
+            
+            const builtinItems = items.filter(item => item.source === 'builtin');
+            builtinItems.forEach(item => {
+              const packElement = this.createPackElement(item, currentPack);
+              builtinList.appendChild(packElement);
+            });
+          }
+        }
+        
+        // Update installed packs
+        if (panelId === 'installed-panel') {
+          const installedList = this.overlay.querySelector('#installedPacksList') as HTMLElement;
+          if (installedList) {
+            installedList.innerHTML = '';
+            
+            const installedItems = items.filter(item => item.source === 'url');
+            installedItems.forEach(item => {
+              const packElement = this.createPackElement(item, currentPack);
+              installedList.appendChild(packElement);
+            });
+          }
+        }
+        
+        // Update local packs
+        if (panelId === 'local-panel') {
+          const localList = this.overlay.querySelector('#localPacksList') as HTMLElement;
+          if (localList) {
+            localList.innerHTML = '';
+            
+            const localItems = items.filter(item => item.source === 'local');
+            localItems.forEach(item => {
+              const packElement = this.createPackElement(item, currentPack);
+              localList.appendChild(packElement);
+            });
+          }
+        }
+    }
+
+    private createPackElement(item: LibraryItem, currentPack: any): HTMLElement {
+        const packDiv = document.createElement('div');
+        packDiv.className = 'pack-item';
+        packDiv.innerHTML = `
+          <div class="pack-cover">
+            <img src="${item.cover || 'assets/default-cover.png'}" alt="${item.name}" onerror="this.src='assets/default-cover.png'">
+          </div>
+          <div class="pack-info">
+            <h3>${item.name}</h3>
+            <p>${item.description || ''}</p>
+            <div class="pack-meta">
+              <span>${item.pack?.version || '1.0'}</span>
+              <span>by ${item.pack?.author || 'Unknown'}</span>
+            </div>
+          </div>
+          <div class="pack-actions">
+            ${currentPack?.id === item.id ? 
+              '<span class="current-pack">Current</span>' : 
+              '<button class="load-pack-btn" data-pack-id="' + item.id + '">Load</button>'
+            }
+            ${item.source === 'url' ? '<button class="remove-pack-btn" data-pack-id="' + item.id + '">Remove</button>' : ''}
+          </div>
+        `;
+        
+        // Add event listeners
+        const loadBtn = packDiv.querySelector('.load-pack-btn');
+        if (loadBtn) {
+          loadBtn.addEventListener('click', () => this.handlePackLoad(item.id));
+        }
+        
+        const removeBtn = packDiv.querySelector('.remove-pack-btn');
+        if (removeBtn) {
+          removeBtn.addEventListener('click', () => this.handlePackRemove(item.id));
+        }
+        
+        return packDiv;
+    }
+
+    private async handlePackLoad(packId: string): Promise<void> {
+        try {
+          if (!this.libraryManager) {
+            alert('Library manager not available.');
+            return;
+          }
+          
+          await this.libraryManager.switchPack(packId);
+          this.close();
+          alert('Pack loaded successfully!');
+        } catch (error) {
+          console.error('Failed to load pack:', error);
+          alert(`Failed to load pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async handlePackRemove(packId: string): Promise<void> {
+        if (!confirm('Remove this pack from your library?')) {
+          return;
+        }
+        
+        try {
+          if (!this.libraryManager) {
+            alert('Library manager not available.');
+            return;
+          }
+          
+          await this.libraryManager.removePack(packId);
+          this.updateLibraryDisplay('installed-panel');
+          alert('Pack removed successfully!');
+        } catch (error) {
+          console.error('Failed to remove pack:', error);
+          alert(`Failed to remove pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private setupControlsEvents(): void {
+        // Controls tab switching
+        const controlsTabs = ['controlsTabKeyboard', 'controlsTabGamepad', 'controlsTabAccessibility'];
+        const controlsPanels = ['keyboardControls', 'gamepadControls', 'accessibilityControls'];
+        
+        controlsTabs.forEach((tabId, index) => {
+            const tab = document.getElementById(tabId);
+            if (tab) {
+                const tabHandler = () => {
+                    // Remove active class from all tabs and panels
+                    controlsTabs.forEach(id => {
+                        const t = document.getElementById(id);
+                        if (t) t.classList.remove('active');
+                    });
+                    controlsPanels.forEach(id => {
+                        const p = document.getElementById(id);
+                        if (p) p.classList.remove('active');
+                    });
+                    
+                    // Add active class to clicked tab and corresponding panel
+                    tab.classList.add('active');
+                    const panel = document.getElementById(controlsPanels[index]);
+                    if (panel) panel.classList.add('active');
+                };
+                tab.addEventListener('click', tabHandler, { signal: this.abortController.signal });
+                this.eventListeners.push({ element: tab, type: 'click', listener: tabHandler });
+            }
+        });
+
+        // Binding buttons
+        const bindingButtons = document.querySelectorAll('.binding-btn');
+        bindingButtons.forEach(button => {
+            const btn = button as HTMLElement;
+            const action = btn.getAttribute('data-action');
+            const device = btn.getAttribute('data-device');
+            
+            if (action && device) {
+                const bindingHandler = () => {
+                    this.startRebinding(action as any, device as 'keyboard' | 'gamepad');
+                };
+                btn.addEventListener('click', bindingHandler, { signal: this.abortController.signal });
+                this.eventListeners.push({ element: btn, type: 'click', listener: bindingHandler });
+            }
+        });
+
+        // Reset buttons
+        const resetKeyboardBtn = document.getElementById('resetKeyboardBtn');
+        if (resetKeyboardBtn) {
+            const resetKeyboardHandler = () => {
+                if (confirm('Reset keyboard bindings to defaults?')) {
+                    this.resetKeyboardBindings();
+                }
+            };
+            resetKeyboardBtn.addEventListener('click', resetKeyboardHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: resetKeyboardBtn, type: 'click', listener: resetKeyboardHandler });
+        }
+
+        const resetGamepadBtn = document.getElementById('resetGamepadBtn');
+        if (resetGamepadBtn) {
+            const resetGamepadHandler = () => {
+                if (confirm('Reset gamepad bindings to defaults?')) {
+                    this.resetGamepadBindings();
+                }
+            };
+            resetGamepadBtn.addEventListener('click', resetGamepadHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: resetGamepadBtn, type: 'click', listener: resetGamepadHandler });
+        }
+
+        // Gamepad deadzone
+        const gamepadDeadzone = document.getElementById('gamepadDeadzone') as HTMLInputElement;
+        const deadzoneValue = document.getElementById('deadzoneValue');
+        if (gamepadDeadzone && deadzoneValue) {
+            const deadzoneHandler = () => {
+                const value = Number(gamepadDeadzone.value);
+                deadzoneValue.textContent = `${value}%`;
+                this.updateSetting('input.deadzone', value / 100);
+                // Update gamepad deadzone if available
+                if (this.engine?.getInputMap) {
+                    this.engine.getInputMap().setDeadzone(value);
+                }
+            };
+            gamepadDeadzone.addEventListener('input', deadzoneHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: gamepadDeadzone, type: 'input', listener: deadzoneHandler });
+        }
+
+        // Late jump buffer
+        const lateJumpBuffer = document.getElementById('lateJumpBuffer') as HTMLInputElement;
+        const lateJumpValue = document.getElementById('lateJumpValue');
+        if (lateJumpBuffer && lateJumpValue) {
+            const lateJumpHandler = () => {
+                const value = Number(lateJumpBuffer.value);
+                lateJumpValue.textContent = `${value}ms`;
+                this.updateSetting('accessibility.lateJumpMs', value);
+                // Update input map if available
+                if (this.engine?.getInputMap) {
+                    this.engine.getInputMap().setLateJumpMs(value);
+                }
+            };
+            lateJumpBuffer.addEventListener('input', lateJumpHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: lateJumpBuffer, type: 'input', listener: lateJumpHandler });
+        }
+
+        // Sticky grab
+        const stickyGrab = document.getElementById('stickyGrab') as HTMLInputElement;
+        if (stickyGrab) {
+            const stickyGrabHandler = () => {
+                this.updateSetting('accessibility.stickyGrab', stickyGrab.checked);
+                // Update input map if available
+                if (this.engine?.getInputMap) {
+                    this.engine.getInputMap().setStickyGrab(stickyGrab.checked);
+                }
+            };
+            stickyGrab.addEventListener('change', stickyGrabHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: stickyGrab, type: 'change', listener: stickyGrabHandler });
+        }
+
+        // Cancel rebind button
+        const cancelRebindBtn = document.getElementById('cancelRebindBtn');
+        if (cancelRebindBtn) {
+            const cancelRebindHandler = () => {
+                this.cancelRebinding();
+            };
+            cancelRebindBtn.addEventListener('click', cancelRebindHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: cancelRebindBtn, type: 'click', listener: cancelRebindHandler });
+        }
+
+        // Update gamepad status periodically
+        this.updateGamepadStatus();
+        setInterval(() => {
+            this.updateGamepadStatus();
+        }, 1000);
+    }
+
+    private startRebinding(action: string, device: 'keyboard' | 'gamepad'): void {
+        if (!this.engine?.getInputMap) {
+            console.warn('InputMap not available for rebinding');
+            return;
+        }
+
+        const overlay = document.getElementById('rebindingOverlay');
+        const actionName = document.getElementById('rebindingActionName');
+        
+        if (overlay && actionName) {
+            actionName.textContent = `${action} (${device})`;
+            overlay.style.display = 'flex';
+            
+            // Start rebinding process
+            this.engine.getInputMap().startRebind(action as any, device)
+                .then(() => {
+                    console.log(`Successfully rebound ${action} for ${device}`);
+                    this.updateBindingDisplay();
+                    overlay.style.display = 'none';
+                })
+                .catch((error: unknown) => {
+                    console.error(`Failed to rebind ${action}:`, error);
+                    overlay.style.display = 'none';
+                });
+        }
+    }
+
+    private cancelRebinding(): void {
+        if (this.engine?.getInputMap) {
+            this.engine.getInputMap().cancelRebind();
+        }
+        
+        const overlay = document.getElementById('rebindingOverlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    private updateBindingDisplay(): void {
+        if (!this.engine?.getInputMap) return;
+
+        const profile = this.engine.getInputMap().getProfile();
+        
+        // Update keyboard bindings
+        Object.entries(profile.keyboard).forEach(([action, key]) => {
+            const btn = document.querySelector(`[data-action="${action}"][data-device="keyboard"]`) as HTMLElement;
+            if (btn) {
+                btn.textContent = this.formatKeyName(key as string);
+            }
+        });
+
+        // Update gamepad bindings
+        Object.entries(profile.gamepad).forEach(([action, button]) => {
+            const btn = document.querySelector(`[data-action="${action}"][data-device="gamepad"]`) as HTMLElement;
+            if (btn) {
+                btn.textContent = this.formatButtonName(button as string);
+            }
+        });
+    }
+
+    private formatKeyName(key: string): string {
+        const keyMap: Record<string, string> = {
+            'KeyA': 'A', 'KeyB': 'B', 'KeyC': 'C', 'KeyD': 'D', 'KeyE': 'E',
+            'KeyF': 'F', 'KeyG': 'G', 'KeyH': 'H', 'KeyI': 'I', 'KeyJ': 'J',
+            'KeyK': 'K', 'KeyL': 'L', 'KeyM': 'M', 'KeyN': 'N', 'KeyO': 'O',
+            'KeyP': 'P', 'KeyQ': 'Q', 'KeyR': 'R', 'KeyS': 'S', 'KeyT': 'T',
+            'KeyU': 'U', 'KeyV': 'V', 'KeyW': 'W', 'KeyX': 'X', 'KeyY': 'Y',
+            'KeyZ': 'Z', 'Space': 'Space', 'Escape': 'Esc', 'Enter': 'Enter',
+            'ShiftLeft': 'Shift', 'ControlLeft': 'Ctrl', 'AltLeft': 'Alt',
+            'ArrowLeft': '←', 'ArrowRight': '→', 'ArrowUp': '↑', 'ArrowDown': '↓'
+        };
+        
+        return keyMap[key] || key;
+    }
+
+    private formatButtonName(button: string): string {
+        const buttonMap: Record<string, string> = {
+            'DPadLeft': 'DPad ←', 'DPadRight': 'DPad →', 'DPadUp': 'DPad ↑', 'DPadDown': 'DPad ↓',
+            'ButtonA': 'A Button', 'ButtonB': 'B Button', 'ButtonX': 'X Button', 'ButtonY': 'Y Button',
+            'ButtonL1': 'L1', 'ButtonR1': 'R1', 'ButtonL2': 'L2', 'ButtonR2': 'R2',
+            'ButtonSelect': 'Select', 'ButtonStart': 'Start', 'ButtonL3': 'L3', 'ButtonR3': 'R3'
+        };
+        
+        return buttonMap[button] || button;
+    }
+
+    private resetKeyboardBindings(): void {
+        if (!this.engine?.getInputMap) return;
+
+        const defaultProfile = {
+            keyboard: {
+                Left: 'KeyA',
+                Right: 'KeyD',
+                Up: 'KeyW',
+                Down: 'KeyS',
+                Jump: 'Space',
+                Action: 'KeyE',
+                Block: 'KeyQ',
+                Pause: 'Escape'
+            }
+        };
+
+        this.engine.getInputMap().setProfile({ ...this.engine.getInputMap().getProfile(), ...defaultProfile });
+        this.updateBindingDisplay();
+    }
+
+    private resetGamepadBindings(): void {
+        if (!this.engine?.getInputMap) return;
+
+        const defaultProfile = {
+            gamepad: {
+                Left: 'DPadLeft',
+                Right: 'DPadRight',
+                Up: 'DPadUp',
+                Down: 'DPadDown',
+                Jump: 'ButtonA',
+                Action: 'ButtonB',
+                Block: 'ButtonX',
+                Pause: 'ButtonStart'
+            }
+        };
+
+        this.engine.getInputMap().setProfile({ ...this.engine.getInputMap().getProfile(), ...defaultProfile });
+        this.updateBindingDisplay();
+    }
+
+    private updateGamepadStatus(): void {
+        const statusElement = document.getElementById('gamepadConnected');
+        if (!statusElement) return;
+
+        if (this.engine?.getGamepad) {
+            const gamepad = this.engine.getGamepad();
+            if (gamepad && gamepad.isConnected()) {
+                const count = gamepad.getConnectedCount();
+                statusElement.textContent = `Connected (${count} gamepad${count > 1 ? 's' : ''})`;
+                statusElement.style.color = '#0F0';
+            } else {
+                statusElement.textContent = 'Not Connected';
+                statusElement.style.color = '#F00';
+            }
+        } else {
+            statusElement.textContent = 'Not Available';
+            statusElement.style.color = '#666';
+        }
     }
 } 

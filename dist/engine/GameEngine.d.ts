@@ -28,6 +28,7 @@ export declare class GameEngine {
     private debugOverlay;
     private platformSwitchInProgress;
     constructor(canvas: HTMLCanvasElement, platformKey?: string);
+    private initializePerformanceMonitoring;
     private createTestEntities;
     loadGamePack(url: string): Promise<void>;
     start(): void;
@@ -40,6 +41,14 @@ export declare class GameEngine {
     private applyCheatEffects;
     private checkCollisionsWithCheats;
     private handlePlayerInput;
+    /**
+     * Check if player is near a ledge for sticky grab
+     */
+    private checkNearLedge;
+    /**
+     * Handle ledge grab mechanics
+     */
+    private handleLedgeGrab;
     private render;
     private getCompactInstructions;
     getRenderer(): Renderer;
@@ -55,6 +64,8 @@ export declare class GameEngine {
     getCheatManager(): CheatManager;
     getFreeCamera(): FreeCamera;
     getDebugOverlay(): DebugOverlay;
+    getInputMap(): any;
+    getGamepad(): any;
     setPlatform(platformKey: string): boolean;
     private recreateEntitiesForPlatform;
     getCurrentPlatform(): PlatformConfig;

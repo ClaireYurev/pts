@@ -1,300 +1,349 @@
-import { LevelCanvas } from "./LevelCanvas";
-import { TilePalette } from "./TilePalette";
-import { EntityPalette } from "./EntityPalette";
-import { TriggerManager } from "./TriggerManager";
-import { VisualScriptEditor } from "./VisualScriptEditor";
-import { CutsceneTimeline } from "./CutsceneTimeline";
-import { ExportManager } from "./ExportManager";
-import { ImportManager } from "./ImportManager";
+import { LevelCanvas } from './LevelCanvas.js';
+import { TilePalette } from './TilePalette.js';
+import { EntityPalette } from './EntityPalette.js';
+import { Inspector } from './Inspector.js';
+import { LinkTool } from './LinkTool.js';
+import { ExportManager } from './ExportManager.js';
+import { ImportManager } from './ImportManager.js';
+import { PlaytestBridge } from './PlaytestBridge.js';
 export class EditorApp {
     constructor() {
-        // Editor state
-        this.currentMode = 'tile';
-        this.selectedTileId = 0;
-        this.selectedEntity = '';
-        this.selectedTrigger = '';
-        // Initialize canvas
-        const canvas = document.getElementById("levelCanvas");
-        if (!canvas) {
-            throw new Error("Level canvas not found");
-        }
-        this.levelCanvas = new LevelCanvas(canvas, 800, 600);
-        // Initialize palettes
-        const tilePaletteContainer = document.getElementById("tilePalette");
-        const entityPaletteContainer = document.getElementById("entityPalette");
-        const triggerPaletteContainer = document.getElementById("triggerPalette");
-        if (!tilePaletteContainer || !entityPaletteContainer || !triggerPaletteContainer) {
-            throw new Error("Palette containers not found");
-        }
-        // Create sample tile images (in a real app, these would be loaded from assets)
-        const tileImages = this.createSampleTileImages();
-        this.tilePalette = new TilePalette(tilePaletteContainer, tileImages);
-        this.entityPalette = new EntityPalette(entityPaletteContainer, [
-            "Player", "Enemy", "Trap", "Collectible", "NPC"
-        ]);
-        // Initialize trigger manager
-        this.triggerManager = new TriggerManager();
-        // Initialize script editor
-        const scriptContainer = document.getElementById("scriptEditor");
-        if (scriptContainer) {
-            this.scriptEditor = new VisualScriptEditor(scriptContainer);
-        }
-        // Initialize cutscene editor
-        const cutsceneContainer = document.getElementById("cutsceneEditor");
-        if (cutsceneContainer) {
-            this.cutsceneEditor = new CutsceneTimeline(cutsceneContainer);
-        }
-        // Setup tab switching
-        this.setupTabSwitching();
-        // Initialize export/import managers
-        this.exportManager = new ExportManager();
-        this.importManager = new ImportManager(this);
-        // Setup event listeners
+        this.selectedTool = 'select';
+        this.selectedEntity = null;
+        this.isInitialized = false;
+        this.initializeComponents();
         this.setupEventListeners();
-        this.setupModeSwitching();
+        this.createDefaultLevel();
+        this.isInitialized = true;
     }
-    createSampleTileImages() {
-        // Create sample tile images for demonstration
-        // In a real implementation, these would be loaded from actual tile assets
-        const images = [];
-        // Create 8 sample tiles with different colors
-        for (let i = 0; i < 8; i++) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const ctx = canvas.getContext('2d');
-            // Different colors for different tile types
-            const colors = ['#8B4513', '#228B22', '#4169E1', '#FFD700', '#DC143C', '#9932CC', '#FF6347', '#20B2AA'];
-            ctx.fillStyle = colors[i];
-            ctx.fillRect(0, 0, 32, 32);
-            // Add some texture
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(0, 0, 32, 32);
-            const img = new Image();
-            img.src = canvas.toDataURL();
-            images.push(img);
+    initializeComponents() {
+        // Initialize canvas
+        const canvasElement = document.getElementById('editorCanvas');
+        if (!canvasElement) {
+            throw new Error('Editor canvas not found');
         }
-        return images;
+        this.canvas = new LevelCanvas(canvasElement);
+        // Initialize palettes
+        this.tilePalette = new TilePalette();
+        this.entityPalette = new EntityPalette();
+        // Initialize tools
+        this.inspector = new Inspector();
+        this.linkTool = new LinkTool();
+        this.exportManager = new ExportManager();
+        this.importManager = new ImportManager();
+        this.playtestBridge = new PlaytestBridge();
     }
     setupEventListeners() {
-        const canvas = this.levelCanvas.getCanvas();
-        // Handle canvas clicks for placing tiles/entities/triggers
-        canvas.addEventListener("click", (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            switch (this.currentMode) {
-                case 'tile':
-                    const tileId = this.tilePalette.getSelectedTile();
-                    this.levelCanvas.placeTile(x, y, tileId);
-                    break;
-                case 'entity':
-                    const entityType = this.entityPalette.getSelectedEntity();
-                    if (entityType) {
-                        this.levelCanvas.placeEntity(x, y, entityType);
-                    }
-                    break;
-                case 'trigger':
-                    const triggerType = this.selectedTrigger;
-                    if (triggerType) {
-                        this.triggerManager.addTrigger({
-                            x: Math.floor(x / 32) * 32,
-                            y: Math.floor(y / 32) * 32,
-                            width: 32,
-                            height: 32,
-                            type: triggerType,
-                            params: { amount: 10 }
-                        });
-                        this.levelCanvas.redraw(); // Redraw to show trigger
-                    }
-                    break;
-            }
-        });
-        // Handle right-click for context menu
-        canvas.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            this.showContextMenu(e);
-        });
-        // Setup export button
-        const exportBtn = document.getElementById("exportBtn");
-        if (exportBtn) {
-            exportBtn.addEventListener("click", () => this.exportCurrentPack());
-        }
-        // Setup import button
-        const importBtn = document.getElementById("importBtn");
-        if (importBtn) {
-            importBtn.addEventListener("click", () => this.importPack());
-        }
-    }
-    setupModeSwitching() {
-        // Setup mode switching buttons
-        const modeButtons = document.querySelectorAll('.mode-btn');
-        modeButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = e.target;
-                const mode = target.dataset.mode;
-                if (mode) {
-                    this.setMode(mode);
+        // Tool selection
+        document.querySelectorAll('[data-tool]').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tool = e.target.getAttribute('data-tool');
+                if (tool) {
+                    this.selectTool(tool);
                 }
             });
         });
-    }
-    setupTabSwitching() {
-        // Setup tab switching
-        const tabButtons = document.querySelectorAll('.tab-btn');
-        tabButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = e.target;
-                const tabName = target.dataset.tab;
+        // Sidebar tabs
+        document.querySelectorAll('.sidebar-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const tabName = e.target.getAttribute('data-tab');
                 if (tabName) {
                     this.switchTab(tabName);
                 }
             });
         });
+        // Tile palette
+        document.querySelectorAll('[data-tile]').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const tile = e.target.getAttribute('data-tile');
+                if (tile) {
+                    this.selectTile(tile);
+                }
+            });
+        });
+        // Entity palette
+        document.querySelectorAll('[data-entity]').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const entity = e.target.getAttribute('data-entity');
+                if (entity) {
+                    this.selectEntity(entity);
+                }
+            });
+        });
+        // Toolbar buttons
+        document.getElementById('importBtn')?.addEventListener('click', () => this.importLevel());
+        document.getElementById('exportBtn')?.addEventListener('click', () => this.exportLevel());
+        document.getElementById('playtestBtn')?.addEventListener('click', () => this.playtest());
+        // Zoom controls
+        document.getElementById('zoomIn')?.addEventListener('click', () => this.canvas.zoomIn());
+        document.getElementById('zoomOut')?.addEventListener('click', () => this.canvas.zoomOut());
+        document.getElementById('zoomReset')?.addEventListener('click', () => this.canvas.zoomReset());
+        // Playtest controls
+        document.getElementById('closePlaytest')?.addEventListener('click', () => this.closePlaytest());
+        // Import file input
+        document.getElementById('importFile')?.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                this.importManager.importFile(file).then((levelData) => {
+                    this.loadLevel(levelData);
+                }).catch((error) => {
+                    console.error('Import failed:', error);
+                    this.updateStatus('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                });
+            }
+        });
+        // Canvas events
+        this.canvas.onTileClick = (x, y) => this.handleTileClick(x, y);
+        this.canvas.onEntityClick = (entity) => this.handleEntityClick(entity);
+        this.canvas.onEntityPlace = (x, y) => this.handleEntityPlace(x, y);
+    }
+    createDefaultLevel() {
+        this.currentLevel = {
+            id: 'level-1',
+            name: 'Level 1',
+            width: 50,
+            height: 30,
+            tiles: Array(30).fill(null).map(() => Array(50).fill('empty')),
+            entities: [],
+            links: []
+        };
+        // Add some default ground tiles
+        for (let x = 0; x < 50; x++) {
+            this.currentLevel.tiles[29][x] = 'ground';
+        }
+        this.canvas.loadLevel(this.currentLevel);
+        this.updateStatus('Default level created');
+    }
+    selectTool(tool) {
+        this.selectedTool = tool;
+        // Update UI
+        document.querySelectorAll('[data-tool]').forEach(button => {
+            button.classList.remove('active');
+        });
+        document.querySelector(`[data-tool="${tool}"]`)?.classList.add('active');
+        // Update canvas cursor
+        this.canvas.setTool(tool);
+        this.updateStatus(`Tool selected: ${tool}`);
     }
     switchTab(tabName) {
-        // Remove active class from all tabs and content
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.remove('active');
+        // Update tab buttons
+        document.querySelectorAll('.sidebar-tab').forEach(tab => {
+            tab.classList.remove('active');
         });
+        document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+        // Update tab content
         document.querySelectorAll('.tab-content').forEach(content => {
             content.classList.remove('active');
         });
-        // Add active class to selected tab and content
-        const selectedTab = document.querySelector(`[data-tab="${tabName}"]`);
-        const selectedContent = document.getElementById(`${tabName}Tab`);
-        if (selectedTab)
-            selectedTab.classList.add('active');
-        if (selectedContent)
-            selectedContent.classList.add('active');
+        document.getElementById(`${tabName}Tab`)?.classList.add('active');
     }
-    setMode(mode) {
-        this.currentMode = mode;
-        // Update UI to show current mode
-        document.querySelectorAll('.mode-btn').forEach(btn => {
-            btn.classList.remove('active');
+    selectTile(tile) {
+        this.tilePalette.selectTile(tile);
+        this.selectTool('paint');
+        // Update UI
+        document.querySelectorAll('[data-tile]').forEach(item => {
+            item.classList.remove('selected');
         });
-        document.querySelector(`[data-mode="${mode}"]`)?.classList.add('active');
-        // Update cursor
-        const canvas = this.levelCanvas.getCanvas();
-        switch (mode) {
-            case 'tile':
-                canvas.style.cursor = 'crosshair';
+        document.querySelector(`[data-tile="${tile}"]`)?.classList.add('selected');
+        this.updateStatus(`Tile selected: ${tile}`);
+    }
+    selectEntity(entity) {
+        this.entityPalette.selectEntity(entity);
+        this.selectTool('entity');
+        // Update UI
+        document.querySelectorAll('[data-entity]').forEach(item => {
+            item.classList.remove('selected');
+        });
+        document.querySelector(`[data-entity="${entity}"]`)?.classList.add('selected');
+        this.updateStatus(`Entity selected: ${entity}`);
+    }
+    handleTileClick(x, y) {
+        switch (this.selectedTool) {
+            case 'paint':
+                this.paintTile(x, y);
                 break;
-            case 'entity':
-                canvas.style.cursor = 'pointer';
+            case 'erase':
+                this.eraseTile(x, y);
                 break;
-            case 'trigger':
-                canvas.style.cursor = 'grab';
+            case 'select':
+                this.selectTileAt(x, y);
                 break;
         }
     }
-    showContextMenu(e) {
-        // Create context menu for editing placed objects
-        const contextMenu = document.createElement('div');
-        contextMenu.className = 'context-menu';
-        contextMenu.innerHTML = `
-      <div class="context-item" data-action="edit">Edit</div>
-      <div class="context-item" data-action="delete">Delete</div>
-    `;
-        contextMenu.style.position = 'absolute';
-        contextMenu.style.left = e.clientX + 'px';
-        contextMenu.style.top = e.clientY + 'px';
-        document.body.appendChild(contextMenu);
-        // Handle context menu clicks
-        contextMenu.addEventListener('click', (e) => {
-            const target = e.target;
-            const action = target.dataset.action;
-            if (action === 'edit') {
-                this.editSelectedObject(e.clientX, e.clientY);
-            }
-            else if (action === 'delete') {
-                this.deleteSelectedObject(e.clientX, e.clientY);
-            }
-            document.body.removeChild(contextMenu);
-        });
-        // Remove context menu when clicking elsewhere
-        setTimeout(() => {
-            document.addEventListener('click', () => {
-                if (document.body.contains(contextMenu)) {
-                    document.body.removeChild(contextMenu);
-                }
-            }, { once: true });
-        }, 0);
+    handleEntityClick(entity) {
+        this.selectedEntity = entity;
+        this.inspector.loadEntity(entity);
+        this.switchTab('inspector');
+        this.updateStatus(`Entity selected: ${entity.type}`);
     }
-    editSelectedObject(x, y) {
-        // TODO: Implement object editing
-        console.log('Edit object at', x, y);
+    handleEntityPlace(x, y) {
+        if (this.selectedTool === 'entity' && this.entityPalette.getSelectedEntity()) {
+            const entityType = this.entityPalette.getSelectedEntity();
+            const entity = {
+                id: this.generateId(),
+                type: entityType,
+                x: x,
+                y: y,
+                props: this.getDefaultProps(entityType)
+            };
+            this.currentLevel.entities.push(entity);
+            this.canvas.addEntity(entity);
+            this.updateStatus(`Entity placed: ${entityType}`);
+        }
     }
-    deleteSelectedObject(x, y) {
-        // TODO: Implement object deletion
-        console.log('Delete object at', x, y);
+    paintTile(x, y) {
+        const selectedTile = this.tilePalette.getSelectedTile();
+        if (selectedTile && selectedTile !== 'empty') {
+            this.currentLevel.tiles[y][x] = selectedTile;
+            this.canvas.setTile(x, y, selectedTile);
+            this.updateStatus(`Tile painted: ${selectedTile} at (${x}, ${y})`);
+        }
     }
-    async exportCurrentPack() {
-        const packData = {
-            meta: {
-                name: "My Custom Pack",
-                version: "1.0.0",
-                description: "Created with PrinceTS Editor",
-                author: "Unknown",
-                created: new Date().toISOString(),
-                modified: new Date().toISOString()
+    eraseTile(x, y) {
+        this.currentLevel.tiles[y][x] = 'empty';
+        this.canvas.setTile(x, y, 'empty');
+        this.updateStatus(`Tile erased at (${x}, ${y})`);
+    }
+    selectTileAt(x, y) {
+        const tile = this.currentLevel.tiles[y][x];
+        if (tile && tile !== 'empty') {
+            this.selectTile(tile);
+        }
+    }
+    getDefaultProps(entityType) {
+        const defaults = {
+            guard: {
+                ai: 'patrol',
+                speed: 50,
+                health: 100,
+                damage: 20
             },
-            tileMap: this.levelCanvas.getGrid(),
-            entities: this.levelCanvas.getEntities(),
-            triggers: this.triggerManager.getTriggers(),
-            scripts: this.scriptEditor?.exportRules() || [],
-            cutscenes: this.cutsceneEditor?.exportTimeline() || []
-        };
-        await this.exportManager.exportPack(packData);
-    }
-    importPack() {
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.json,.ptspack';
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-                this.importManager.loadFile(file);
+            potion: {
+                type: 'health',
+                value: 50
+            },
+            sword: {
+                damage: 30,
+                durability: 100
+            },
+            teleporter: {
+                targetId: '',
+                oneWay: false
+            },
+            crusher: {
+                speed: 1,
+                damage: 100,
+                delay: 2000
+            },
+            pressurePlate: {
+                targetId: '',
+                oneTime: false
+            },
+            gate: {
+                locked: false,
+                keyId: ''
+            },
+            looseTile: {
+                fragile: true,
+                fallDelay: 1000
+            },
+            chopper: {
+                speed: 2,
+                damage: 50,
+                range: 32
+            },
+            region: {
+                type: 'checkpoint',
+                message: ''
             }
-        });
+        };
+        return defaults[entityType] || {};
+    }
+    generateId() {
+        return 'entity_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    importLevel() {
+        const fileInput = document.getElementById('importFile');
         fileInput.click();
     }
-    loadPackData(packData) {
-        // Load pack data into editor
-        if (packData.tileMap) {
-            this.levelCanvas.setGrid(packData.tileMap);
+    exportLevel() {
+        try {
+            const gamePack = {
+                id: 'editor-pack',
+                name: 'Editor Created Pack',
+                version: '1.0.0',
+                levels: [this.currentLevel],
+                metadata: {
+                    created: new Date().toISOString(),
+                    editor: 'PrinceTS Visual Game Maker'
+                }
+            };
+            this.exportManager.exportPack(gamePack);
+            this.updateStatus('Level exported successfully');
         }
-        if (packData.entities) {
-            this.levelCanvas.setEntities(packData.entities);
+        catch (error) {
+            console.error('Export failed:', error);
+            this.updateStatus('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
         }
-        if (packData.triggers) {
-            this.triggerManager.setTriggers(packData.triggers);
-        }
-        if (packData.scripts) {
-            this.scriptEditor?.loadRules(packData.scripts);
-        }
-        if (packData.cutscenes) {
-            this.cutsceneEditor?.loadTimeline(packData.cutscenes);
-        }
-        this.levelCanvas.redraw();
     }
-    getLevelCanvas() {
-        return this.levelCanvas;
+    playtest() {
+        try {
+            const gamePack = {
+                id: 'playtest-pack',
+                name: 'Playtest Pack',
+                version: '1.0.0',
+                levels: [this.currentLevel],
+                metadata: {
+                    created: new Date().toISOString(),
+                    editor: 'PrinceTS Visual Game Maker'
+                }
+            };
+            this.playtestBridge.startPlaytest(gamePack);
+            this.updateStatus('Playtest started');
+        }
+        catch (error) {
+            console.error('Playtest failed:', error);
+            this.updateStatus('Playtest failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
     }
-    getTriggerManager() {
-        return this.triggerManager;
+    closePlaytest() {
+        this.playtestBridge.stopPlaytest();
+        this.updateStatus('Playtest closed');
+    }
+    loadLevel(levelData) {
+        this.currentLevel = levelData;
+        this.canvas.loadLevel(levelData);
+        this.updateStatus(`Level loaded: ${levelData.name}`);
+    }
+    updateStatus(message) {
+        const statusElement = document.getElementById('statusText');
+        if (statusElement) {
+            statusElement.textContent = message;
+        }
+        console.log('Editor Status:', message);
+    }
+    getCurrentLevel() {
+        return this.currentLevel;
+    }
+    getSelectedEntity() {
+        return this.selectedEntity;
+    }
+    updateEntity(entity) {
+        const index = this.currentLevel.entities.findIndex(e => e.id === entity.id);
+        if (index !== -1) {
+            this.currentLevel.entities[index] = entity;
+            this.canvas.updateEntity(entity);
+            this.updateStatus(`Entity updated: ${entity.type}`);
+        }
+    }
+    deleteEntity(entityId) {
+        this.currentLevel.entities = this.currentLevel.entities.filter(e => e.id !== entityId);
+        this.canvas.removeEntity(entityId);
+        if (this.selectedEntity?.id === entityId) {
+            this.selectedEntity = null;
+            this.inspector.clear();
+        }
+        this.updateStatus('Entity deleted');
     }
 }
-// Initialize editor when page loads
-window.addEventListener("load", () => {
-    try {
-        new EditorApp();
-        console.log("PrinceTS Editor initialized successfully");
-    }
-    catch (error) {
-        console.error("Failed to initialize editor:", error);
-    }
-});
 //# sourceMappingURL=EditorApp.js.map

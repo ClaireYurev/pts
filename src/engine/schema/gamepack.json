@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Game Pack Schema",
+  "type": "object",
+  "required": ["id", "name", "version", "levels", "metadata"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "levels": {
+      "type": "array",
+      "items": {
+        "$ref": "level.json"
+      },
+      "minItems": 1
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "$ref": "script.json"
+      }
+    },
+    "cutscenes": {
+      "type": "array",
+      "items": {
+        "$ref": "cutscene.json"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["created", "editor"],
+      "properties": {
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "editor": {
+          "type": "string",
+          "const": "PrinceTS Visual Game Maker"
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 20
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+} 

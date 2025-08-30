@@ -1,218 +1,394 @@
 export class LevelCanvas {
-    constructor(canvas, width, height) {
-        this.tileWidth = 32;
-        this.tileHeight = 32;
-        this.entities = [];
-        this.cameraX = 0;
-        this.cameraY = 0;
+    constructor(canvas) {
+        this.level = null;
+        this.gridSize = 32;
+        this.zoom = 1;
+        this.panX = 0;
+        this.panY = 0;
         this.isDragging = false;
         this.lastMouseX = 0;
         this.lastMouseY = 0;
+        this.currentTool = 'select';
+        this.selectedTile = 'ground';
+        this.selectedEntity = '';
+        // Event callbacks
+        this.onTileClick = null;
+        this.onEntityClick = null;
+        this.onEntityPlace = null;
         this.canvas = canvas;
-        this.ctx = canvas.getContext("2d");
-        // Calculate grid dimensions
-        const cols = Math.floor(width / this.tileWidth);
-        const rows = Math.floor(height / this.tileHeight);
-        this.grid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+        this.ctx = canvas.getContext('2d');
+        this.setupCanvas();
         this.setupEventListeners();
-        this.drawGrid();
+        this.render();
+    }
+    setupCanvas() {
+        // Set canvas size to fill container
+        const container = this.canvas.parentElement;
+        if (container) {
+            this.canvas.width = container.clientWidth;
+            this.canvas.height = container.clientHeight;
+        }
+        // Set up rendering context
+        this.ctx.imageSmoothingEnabled = false; // Pixel-perfect rendering
     }
     setupEventListeners() {
-        // Camera panning with middle mouse button
-        this.canvas.addEventListener("mousedown", (e) => {
-            if (e.button === 1) { // Middle mouse button
-                e.preventDefault();
-                this.isDragging = true;
-                this.lastMouseX = e.clientX;
-                this.lastMouseY = e.clientY;
-                this.canvas.style.cursor = 'grabbing';
+        // Mouse events
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this));
+        // Touch events for mobile
+        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this));
+        this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        this.canvas.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        // Window resize
+        window.addEventListener('resize', this.handleResize.bind(this));
+    }
+    handleMouseDown(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        this.lastMouseX = x;
+        this.lastMouseY = y;
+        if (e.button === 0) { // Left click
+            this.handleLeftClick(x, y);
+        }
+        else if (e.button === 1) { // Middle click
+            this.isDragging = true;
+            this.canvas.style.cursor = 'grabbing';
+        }
+    }
+    handleMouseMove(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (this.isDragging) {
+            const deltaX = x - this.lastMouseX;
+            const deltaY = y - this.lastMouseY;
+            this.panX += deltaX;
+            this.panY += deltaY;
+            this.lastMouseX = x;
+            this.lastMouseY = y;
+            this.render();
+        }
+        else {
+            // Update cursor based on tool and position
+            this.updateCursor(x, y);
+        }
+    }
+    handleMouseUp(e) {
+        e.preventDefault();
+        if (e.button === 1) { // Middle click
+            this.isDragging = false;
+            this.canvas.style.cursor = 'crosshair';
+        }
+    }
+    handleWheel(e) {
+        e.preventDefault();
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.max(0.25, Math.min(4, this.zoom * zoomFactor));
+        // Zoom towards mouse position
+        const zoomRatio = newZoom / this.zoom;
+        this.panX = mouseX - (mouseX - this.panX) * zoomRatio;
+        this.panY = mouseY - (mouseY - this.panY) * zoomRatio;
+        this.zoom = newZoom;
+        this.render();
+    }
+    handleTouchStart(e) {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            this.lastMouseX = x;
+            this.lastMouseY = y;
+            this.handleLeftClick(x, y);
+        }
+    }
+    handleTouchMove(e) {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            const deltaX = x - this.lastMouseX;
+            const deltaY = y - this.lastMouseY;
+            this.panX += deltaX;
+            this.panY += deltaY;
+            this.lastMouseX = x;
+            this.lastMouseY = y;
+            this.render();
+        }
+    }
+    handleTouchEnd(e) {
+        e.preventDefault();
+    }
+    handleResize() {
+        const container = this.canvas.parentElement;
+        if (container) {
+            this.canvas.width = container.clientWidth;
+            this.canvas.height = container.clientHeight;
+            this.render();
+        }
+    }
+    handleLeftClick(x, y) {
+        const gridPos = this.screenToGrid(x, y);
+        if (gridPos) {
+            if (this.currentTool === 'entity' && this.selectedEntity) {
+                this.onEntityPlace?.(gridPos.x, gridPos.y);
             }
-        });
-        this.canvas.addEventListener("mousemove", (e) => {
-            if (this.isDragging) {
-                const deltaX = e.clientX - this.lastMouseX;
-                const deltaY = e.clientY - this.lastMouseY;
-                this.cameraX += deltaX;
-                this.cameraY += deltaY;
-                this.lastMouseX = e.clientX;
-                this.lastMouseY = e.clientY;
-                this.redraw();
+            else {
+                this.onTileClick?.(gridPos.x, gridPos.y);
             }
-        });
-        this.canvas.addEventListener("mouseup", (e) => {
-            if (e.button === 1) {
-                this.isDragging = false;
+        }
+    }
+    updateCursor(x, y) {
+        const gridPos = this.screenToGrid(x, y);
+        if (gridPos) {
+            if (this.currentTool === 'entity') {
+                this.canvas.style.cursor = 'crosshair';
+            }
+            else if (this.currentTool === 'paint') {
+                this.canvas.style.cursor = 'crosshair';
+            }
+            else if (this.currentTool === 'erase') {
+                this.canvas.style.cursor = 'crosshair';
+            }
+            else {
                 this.canvas.style.cursor = 'default';
             }
-        });
-        // Zoom with mouse wheel
-        this.canvas.addEventListener("wheel", (e) => {
-            e.preventDefault();
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            this.zoom(zoomFactor, e.offsetX, e.offsetY);
-        });
-    }
-    zoom(factor, centerX, centerY) {
-        // TODO: Implement zoom functionality
-        console.log('Zoom:', factor, 'at', centerX, centerY);
-    }
-    drawGrid() {
-        this.ctx.save();
-        this.ctx.translate(-this.cameraX, -this.cameraY);
-        const cols = this.grid[0].length;
-        const rows = this.grid.length;
-        // Draw grid lines
-        this.ctx.strokeStyle = "#ccc";
-        this.ctx.lineWidth = 1;
-        for (let x = 0; x <= cols; x++) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x * this.tileWidth, 0);
-            this.ctx.lineTo(x * this.tileWidth, rows * this.tileHeight);
-            this.ctx.stroke();
         }
-        for (let y = 0; y <= rows; y++) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y * this.tileHeight);
-            this.ctx.lineTo(cols * this.tileWidth, y * this.tileHeight);
-            this.ctx.stroke();
+        else {
+            this.canvas.style.cursor = 'default';
         }
-        this.ctx.restore();
     }
-    drawTiles() {
-        if (!this.tilesetImage)
+    screenToGrid(screenX, screenY) {
+        if (!this.level)
+            return null;
+        const gridX = Math.floor((screenX - this.panX) / (this.gridSize * this.zoom));
+        const gridY = Math.floor((screenY - this.panY) / (this.gridSize * this.zoom));
+        if (gridX >= 0 && gridX < this.level.width && gridY >= 0 && gridY < this.level.height) {
+            return { x: gridX, y: gridY };
+        }
+        return null;
+    }
+    gridToScreen(gridX, gridY) {
+        return {
+            x: gridX * this.gridSize * this.zoom + this.panX,
+            y: gridY * this.gridSize * this.zoom + this.panY
+        };
+    }
+    render() {
+        if (!this.level)
             return;
-        this.ctx.save();
-        this.ctx.translate(-this.cameraX, -this.cameraY);
-        const cols = this.grid[0].length;
-        const rows = this.grid.length;
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                const tileId = this.grid[y][x];
-                if (tileId > 0) {
-                    // Calculate source rectangle in tileset
-                    const tilesPerRow = Math.floor(this.tilesetImage.width / this.tileWidth);
-                    const sourceX = (tileId - 1) % tilesPerRow * this.tileWidth;
-                    const sourceY = Math.floor((tileId - 1) / tilesPerRow) * this.tileHeight;
-                    this.ctx.drawImage(this.tilesetImage, sourceX, sourceY, this.tileWidth, this.tileHeight, x * this.tileWidth, y * this.tileHeight, this.tileWidth, this.tileHeight);
+        // Clear canvas
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Calculate visible grid range
+        const startX = Math.max(0, Math.floor(-this.panX / (this.gridSize * this.zoom)));
+        const endX = Math.min(this.level.width, Math.ceil((this.canvas.width - this.panX) / (this.gridSize * this.zoom)));
+        const startY = Math.max(0, Math.floor(-this.panY / (this.gridSize * this.zoom)));
+        const endY = Math.min(this.level.height, Math.ceil((this.canvas.height - this.panY) / (this.gridSize * this.zoom)));
+        // Draw tiles
+        for (let y = startY; y < endY; y++) {
+            for (let x = startX; x < endX; x++) {
+                this.drawTile(x, y);
+            }
+        }
+        // Draw entities
+        this.level.entities.forEach(entity => {
+            this.drawEntity(entity);
+        });
+        // Draw grid
+        this.drawGrid(startX, endX, startY, endY);
+        // Draw selection overlay
+        this.drawSelectionOverlay();
+    }
+    drawTile(x, y) {
+        if (!this.level)
+            return;
+        const tile = this.level.tiles[y][x];
+        if (!tile || tile === 'empty')
+            return;
+        const screenPos = this.gridToScreen(x, y);
+        const size = this.gridSize * this.zoom;
+        // Draw tile background
+        this.ctx.fillStyle = this.getTileColor(tile);
+        this.ctx.fillRect(screenPos.x, screenPos.y, size, size);
+        // Draw tile border
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(screenPos.x, screenPos.y, size, size);
+    }
+    drawEntity(entity) {
+        const screenPos = this.gridToScreen(entity.x, entity.y);
+        const size = this.gridSize * this.zoom;
+        // Draw entity background
+        this.ctx.fillStyle = this.getEntityColor(entity.type);
+        this.ctx.fillRect(screenPos.x, screenPos.y, size, size);
+        // Draw entity icon/text
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = `${Math.max(8, size * 0.4)}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(this.getEntityIcon(entity.type), screenPos.x + size / 2, screenPos.y + size / 2);
+        // Draw entity border
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(screenPos.x, screenPos.y, size, size);
+    }
+    drawGrid(startX, endX, startY, endY) {
+        this.ctx.strokeStyle = '#333';
+        this.ctx.lineWidth = 1;
+        // Draw vertical lines
+        for (let x = startX; x <= endX; x++) {
+            const screenX = x * this.gridSize * this.zoom + this.panX;
+            this.ctx.beginPath();
+            this.ctx.moveTo(screenX, 0);
+            this.ctx.lineTo(screenX, this.canvas.height);
+            this.ctx.stroke();
+        }
+        // Draw horizontal lines
+        for (let y = startY; y <= endY; y++) {
+            const screenY = y * this.gridSize * this.zoom + this.panY;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, screenY);
+            this.ctx.lineTo(this.canvas.width, screenY);
+            this.ctx.stroke();
+        }
+    }
+    drawSelectionOverlay() {
+        // Draw tool preview
+        if (this.currentTool === 'entity' && this.selectedEntity) {
+            const mousePos = this.getMousePosition();
+            if (mousePos) {
+                const gridPos = this.screenToGrid(mousePos.x, mousePos.y);
+                if (gridPos) {
+                    const screenPos = this.gridToScreen(gridPos.x, gridPos.y);
+                    const size = this.gridSize * this.zoom;
+                    // Draw preview
+                    this.ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+                    this.ctx.fillRect(screenPos.x, screenPos.y, size, size);
+                    this.ctx.strokeStyle = '#4CAF50';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeRect(screenPos.x, screenPos.y, size, size);
                 }
             }
         }
-        this.ctx.restore();
     }
-    drawEntities() {
-        this.ctx.save();
-        this.ctx.translate(-this.cameraX, -this.cameraY);
-        this.entities.forEach(entity => {
-            // Draw entity placeholder (colored rectangle)
-            const colors = {
-                'Player': '#00FF00',
-                'Enemy': '#FF0000',
-                'Trap': '#FFA500',
-                'Collectible': '#FFFF00',
-                'NPC': '#0000FF'
-            };
-            this.ctx.fillStyle = colors[entity.type] || '#888888';
-            this.ctx.fillRect(entity.x, entity.y, this.tileWidth, this.tileHeight);
-            // Draw entity label
-            this.ctx.fillStyle = '#000';
-            this.ctx.font = '10px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(entity.type, entity.x + this.tileWidth / 2, entity.y + this.tileHeight / 2 + 3);
-        });
-        this.ctx.restore();
+    getMousePosition() {
+        // This would be updated by mouse move events
+        return null;
     }
-    drawTriggers(triggers) {
-        this.ctx.save();
-        this.ctx.translate(-this.cameraX, -this.cameraY);
-        triggers.forEach(trigger => {
-            // Draw trigger as semi-transparent overlay
-            this.ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
-            this.ctx.fillRect(trigger.x, trigger.y, trigger.width, trigger.height);
-            // Draw trigger border
-            this.ctx.strokeStyle = '#FF00FF';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(trigger.x, trigger.y, trigger.width, trigger.height);
-            // Draw trigger label
-            this.ctx.fillStyle = '#FF00FF';
-            this.ctx.font = '10px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(trigger.type, trigger.x + trigger.width / 2, trigger.y + trigger.height / 2 + 3);
-        });
-        this.ctx.restore();
+    getTileColor(tile) {
+        const colors = {
+            ground: '#8B4513',
+            wall: '#696969',
+            platform: '#A0522D',
+            spike: '#FF4500',
+            water: '#4169E1',
+            lava: '#DC143C',
+            ice: '#87CEEB',
+            grass: '#228B22'
+        };
+        return colors[tile] || '#666';
     }
-    placeTile(x, y, tileId) {
-        const tx = Math.floor((x + this.cameraX) / this.tileWidth);
-        const ty = Math.floor((y + this.cameraY) / this.tileHeight);
-        if (ty >= 0 && ty < this.grid.length && tx >= 0 && tx < this.grid[0].length) {
-            this.grid[ty][tx] = tileId;
-            this.redraw();
+    getEntityColor(entityType) {
+        const colors = {
+            guard: '#FF6B6B',
+            potion: '#4ECDC4',
+            sword: '#45B7D1',
+            teleporter: '#96CEB4',
+            crusher: '#FFEAA7',
+            pressurePlate: '#DDA0DD',
+            gate: '#98D8C8',
+            looseTile: '#F7DC6F',
+            chopper: '#BB8FCE',
+            region: '#85C1E9'
+        };
+        return colors[entityType] || '#999';
+    }
+    getEntityIcon(entityType) {
+        const icons = {
+            guard: '🛡️',
+            potion: '🧪',
+            sword: '⚔️',
+            teleporter: '🌀',
+            crusher: '🪨',
+            pressurePlate: '⚡',
+            gate: '🚪',
+            looseTile: '🧱',
+            chopper: '🪓',
+            region: '📍'
+        };
+        return icons[entityType] || '?';
+    }
+    loadLevel(level) {
+        this.level = level;
+        this.render();
+    }
+    setTile(x, y, tile) {
+        if (this.level && x >= 0 && x < this.level.width && y >= 0 && y < this.level.height) {
+            this.level.tiles[y][x] = tile;
+            this.render();
         }
     }
-    placeEntity(x, y, entityType) {
-        const gridX = Math.floor((x + this.cameraX) / this.tileWidth) * this.tileWidth;
-        const gridY = Math.floor((y + this.cameraY) / this.tileHeight) * this.tileHeight;
-        const entity = {
-            x: gridX,
-            y: gridY,
-            type: entityType
-        };
-        this.entities.push(entity);
-        this.redraw();
+    addEntity(entity) {
+        if (this.level) {
+            this.level.entities.push(entity);
+            this.render();
+        }
     }
-    removeEntity(x, y) {
-        const gridX = Math.floor((x + this.cameraX) / this.tileWidth) * this.tileWidth;
-        const gridY = Math.floor((y + this.cameraY) / this.tileHeight) * this.tileHeight;
-        this.entities = this.entities.filter(entity => entity.x !== gridX || entity.y !== gridY);
-        this.redraw();
+    updateEntity(entity) {
+        if (this.level) {
+            const index = this.level.entities.findIndex(e => e.id === entity.id);
+            if (index !== -1) {
+                this.level.entities[index] = entity;
+                this.render();
+            }
+        }
     }
-    redraw() {
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        // Draw in order: tiles, entities, triggers, grid
-        this.drawTiles();
-        this.drawEntities();
-        this.drawGrid();
+    removeEntity(entityId) {
+        if (this.level) {
+            this.level.entities = this.level.entities.filter(e => e.id !== entityId);
+            this.render();
+        }
     }
-    setTileset(image) {
-        this.tilesetImage = image;
-        this.redraw();
+    setTool(tool) {
+        this.currentTool = tool;
     }
-    getGrid() {
-        return this.grid.map(row => [...row]); // Return copy
+    setSelectedTile(tile) {
+        this.selectedTile = tile;
     }
-    setGrid(grid) {
-        this.grid = grid.map(row => [...row]); // Store copy
-        this.redraw();
+    setSelectedEntity(entity) {
+        this.selectedEntity = entity;
     }
-    getEntities() {
-        return this.entities.map(entity => ({ ...entity })); // Return copy
+    zoomIn() {
+        this.zoom = Math.min(4, this.zoom * 1.2);
+        this.render();
     }
-    setEntities(entities) {
-        this.entities = entities.map(entity => ({ ...entity })); // Store copy
+    zoomOut() {
+        this.zoom = Math.max(0.25, this.zoom / 1.2);
+        this.render();
     }
-    getCanvas() {
-        return this.canvas;
+    zoomReset() {
+        this.zoom = 1;
+        this.panX = 0;
+        this.panY = 0;
+        this.render();
     }
-    getTileSize() {
-        return { width: this.tileWidth, height: this.tileHeight };
+    getZoom() {
+        return this.zoom;
     }
-    setTileSize(width, height) {
-        this.tileWidth = width;
-        this.tileHeight = height;
-        this.redraw();
-    }
-    getCamera() {
-        return { x: this.cameraX, y: this.cameraY };
-    }
-    setCamera(x, y) {
-        this.cameraX = x;
-        this.cameraY = y;
-        this.redraw();
-    }
-    resetCamera() {
-        this.cameraX = 0;
-        this.cameraY = 0;
-        this.redraw();
+    getGridSize() {
+        return this.gridSize;
     }
 }
 //# sourceMappingURL=LevelCanvas.js.map

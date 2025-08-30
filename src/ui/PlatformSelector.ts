@@ -620,4 +620,11 @@ export class PlatformSelector {
             console.error("Error during PlatformSelector cleanup:", error);
         }
     }
+
+    public updateZIndexForFullscreen(isFullscreen: boolean): void {
+        if (this.overlay) {
+            this.overlay.style.zIndex = isFullscreen ? '9999' : '2000';
+        }
+        console.log(`PlatformSelector z-index updated for fullscreen: ${isFullscreen}`);
+    }
 } 

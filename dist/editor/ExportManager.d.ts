@@ -1,45 +1,22 @@
-export interface PackMeta {
-    name: string;
-    version: string;
-    description: string;
-    author: string;
-    created: string;
-    modified: string;
-}
-export interface ExportData {
-    meta: PackMeta;
-    tileMap: number[][];
-    entities: any[];
-    triggers: any[];
-    scripts: any[];
-    cutscenes: any[];
-    assets?: string[];
-    settings?: Record<string, any>;
-}
+import { GamePack, LevelData } from './EditorApp.js';
+import { ECAGraph } from './VisualScriptEditor.js';
+import { Cutscene } from './CutsceneEditor.js';
 export declare class ExportManager {
-    private packData;
-    exportPack(packData: ExportData): Promise<void>;
-    private validatePackData;
-    private createPackJson;
-    private generateFilename;
-    private exportAsJson;
-    exportAsZip(packData: ExportData): Promise<void>;
-    exportAssets(assets: File[]): Promise<string[]>;
-    private fileToDataUrl;
-    generatePackPreview(packData: ExportData): string;
-    private countTiles;
-    private estimatePackSize;
-    validatePackName(name: string): {
-        valid: boolean;
-        errors: string[];
-    };
-    createDefaultPackMeta(): PackMeta;
-    exportPackWithAssets(packData: ExportData, assetFiles: File[]): Promise<void>;
-    getExportFormats(): {
-        name: string;
-        extension: string;
-        description: string;
-    }[];
-    exportInFormat(packData: ExportData, format: string): Promise<void>;
+    constructor();
+    exportLevel(level: LevelData): void;
+    exportPack(gamePack: GamePack): void;
+    exportPackAsZip(gamePack: GamePack, scripts?: ECAGraph[], cutscenes?: Cutscene[], assets?: Map<string, Blob>): Promise<void>;
+    exportPackAsZipWithJSZip(gamePack: GamePack, scripts?: ECAGraph[], cutscenes?: Cutscene[], assets?: Map<string, Blob>): Promise<void>;
+    exportToClipboard(data: any): void;
+    exportLevelToClipboard(level: LevelData): void;
+    exportPackToClipboard(gamePack: GamePack): void;
+    validateLevel(level: LevelData): string[];
+    validateGamePack(gamePack: GamePack): string[];
+    validateScript(script: ECAGraph): string[];
+    validateCutscene(cutscene: Cutscene): string[];
+    createGamePack(id: string, name: string, version: string, levels: LevelData[], metadata?: Record<string, any>): GamePack;
+    getExportFormats(): string[];
+    getExportFormatDescription(format: string): string;
+    getExportFormatExtension(format: string): string;
 }
 //# sourceMappingURL=ExportManager.d.ts.map

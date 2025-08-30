@@ -24,6 +24,7 @@ export declare class PlatformSelector {
     setPiMenu(piMenu: PiMenuInterface): void;
     isPlatformSelectorVisible(): boolean;
     cleanup(): void;
+    updateZIndexForFullscreen(isFullscreen: boolean): void;
 }
 export {};
 //# sourceMappingURL=PlatformSelector.d.ts.map

@@ -32,13 +32,40 @@ export class GameEngine {
         this.pauseManager = new PauseManager();
         // Initialize dev tools and cheats
         this.cheatManager = new CheatManager();
-        this.freeCamera = new FreeCamera(this.renderer);
-        this.debugOverlay = new DebugOverlay(this.renderer);
+        this.freeCamera = new FreeCamera();
+        this.debugOverlay = new DebugOverlay();
+        // Initialize debug overlay with canvas
+        this.debugOverlay.initialize(canvas);
         this.loop = new GameLoop(this.update.bind(this), this.render.bind(this));
+        // Apply optimal performance settings for current browser
+        this.loop.applyOptimalSettings();
         // Add some test entities for demonstration
         this.createTestEntities();
         // Set up collision system with player entity reference
         this.collision.setPlayerEntityGetter(() => this.entities[0] || null);
+        // Initialize performance monitoring
+        this.initializePerformanceMonitoring();
+    }
+    initializePerformanceMonitoring() {
+        // Monitor performance and adjust settings if needed
+        setInterval(() => {
+            const stats = this.loop.getPerformanceStats();
+            const renderStats = this.renderer.getRenderStats();
+            // Log performance stats in debug mode
+            if (this.fpsDisplay) {
+                console.log(`Performance: FPS=${stats.fps}, Render=${renderStats.frameTime.toFixed(2)}ms, Entities=${renderStats.renderedEntities}/${renderStats.totalEntities}, Culled=${renderStats.culledEntities}`);
+            }
+            // Auto-adjust settings if performance is poor
+            if (stats.fps < 30 && !this.loop.isFixedTimestepEnabled()) {
+                console.log('Performance warning: Enabling fixed timestep for better stability');
+                this.loop.setFixedTimestep(true);
+            }
+            // Enable culling if too many entities
+            if (renderStats.totalEntities > 100 && !this.renderer.getRenderStats().culledEntities) {
+                console.log('Performance warning: Enabling viewport culling');
+                this.renderer.setCullingEnabled(true);
+            }
+        }, 5000); // Check every 5 seconds
     }
     createTestEntities() {
         // Get platform dimensions
@@ -113,7 +140,7 @@ export class GameEngine {
             // Update input handler
             this.input.update();
             // Update dev tools
-            this.freeCamera.update(this.input, clampedDt);
+            this.freeCamera.update(clampedDt);
             // Handle state machine input and updates
             this.stateMachine.handleInput(this.input);
             this.stateMachine.update(clampedDt);
@@ -130,7 +157,7 @@ export class GameEngine {
             // Check collisions (with NoClip cheat integration)
             this.checkCollisionsWithCheats();
             // Handle player input for test
-            this.handlePlayerInput(clampedDt);
+            this.handlePlayerInput();
         }
         catch (error) {
             console.error("Error in game engine update:", error);
@@ -176,9 +203,9 @@ export class GameEngine {
             this.entities = [];
             // Reset all subsystems
             this.input.cleanup();
-            this.cheatManager.resetAll();
-            this.freeCamera.enabled = false;
-            this.debugOverlay.enabled = false;
+            this.cheatManager.reset();
+            this.freeCamera.setEnabled(false);
+            this.debugOverlay.setEnabled(false);
             // Recreate test entities
             this.createTestEntities();
             // Restart the game loop
@@ -226,24 +253,26 @@ export class GameEngine {
         const player = this.entities[0];
         if (!player)
             return;
-        // Apply SetHealth cheat
-        if (this.cheatManager.isActive(CheatFlag.SetHealth)) {
-            const healthValue = this.cheatManager.getValue(CheatFlag.SetHealth);
-            if (healthValue !== null && typeof healthValue === 'number') {
+        // Apply health override
+        if (this.cheatManager.hasHealthOverride()) {
+            const healthValue = this.cheatManager.getHealthOverride();
+            if (healthValue !== null) {
                 player.health = healthValue;
             }
         }
         // Apply GiveSword cheat
-        if (this.cheatManager.isActive(CheatFlag.GiveSword)) {
-            player.addToInventory('Sword');
+        if (this.cheatManager.on(CheatFlag.GiveSword)) {
+            if (!player.inventory.includes('Sword')) {
+                player.inventory.push('Sword');
+            }
         }
     }
     checkCollisionsWithCheats() {
         const player = this.entities[0];
         if (!player)
             return;
-        // If NoClip is active, skip collision checks for the player
-        if (this.cheatManager.isActive(CheatFlag.NoClip)) {
+        // If Noclip is active, skip collision checks for the player
+        if (this.cheatManager.on(CheatFlag.Noclip)) {
             // Only check collisions between non-player entities
             const nonPlayerEntities = this.entities.slice(1);
             this.collision.checkCollisions(nonPlayerEntities);
@@ -253,48 +282,70 @@ export class GameEngine {
             this.collision.checkCollisions(this.entities);
         }
     }
-    handlePlayerInput(dt) {
+    handlePlayerInput() {
         try {
-            const player = this.entities[0]; // Assuming first entity is player
-            if (!player) {
-                console.warn("No player entity found for input handling");
+            const player = this.entities[0];
+            if (!player)
                 return;
-            }
-            const axis = this.input.getAxis();
-            const speed = 100; // Reduced speed for lower resolution
-            // Validate axis values to prevent extreme movement
-            const clampedAxisX = Math.max(-1, Math.min(1, axis.x));
-            const clampedAxisY = Math.max(-1, Math.min(1, axis.y));
-            // Horizontal movement
-            player.velocity.x = clampedAxisX * speed;
-            // Jump logic
-            if (this.input.isKeyDown("Space")) {
+            const speed = 150; // Base movement speed
+            // Get movement input using new action-based system
+            let moveX = 0;
+            if (this.input.isActionDown('Left'))
+                moveX--;
+            if (this.input.isActionDown('Right'))
+                moveX++;
+            // Apply movement
+            player.velocity.x = moveX * speed;
+            // Jump logic with late jump buffer support
+            if (this.input.isActionDown('Jump')) {
                 const isOnGround = this.collision.isOnGround(player, this.entities.filter(e => e && e.isStatic));
-                if (isOnGround && player.velocity.y >= 0) { // Only jump if on ground and not already moving up
-                    player.velocity.y = -300; // Reduced jump velocity for lower resolution
+                // Update ground state for late jump buffer
+                this.input.updateGroundState(isOnGround);
+                if (isOnGround && player.velocity.y >= 0) {
+                    player.velocity.y = -300;
                 }
             }
-            // Dev tool keyboard shortcuts
+            else {
+                // Update ground state even when not jumping
+                const isOnGround = this.collision.isOnGround(player, this.entities.filter(e => e && e.isStatic));
+                this.input.updateGroundState(isOnGround);
+            }
+            // Action button (for ledge grabbing, etc.)
+            if (this.input.isActionDown('Action')) {
+                // Handle sticky grab logic
+                const isNearLedge = this.checkNearLedge(player);
+                if (isNearLedge) {
+                    this.input.updateLedgeGrabState(true);
+                    // Trigger ledge grab
+                    this.handleLedgeGrab(player);
+                }
+                else {
+                    this.input.updateLedgeGrabState(false);
+                }
+            }
+            else {
+                this.input.updateLedgeGrabState(false);
+            }
+            // Dev tool keyboard shortcuts (keep these as direct key checks for now)
             if (this.input.isKeyPressed("F1")) {
-                this.debugOverlay.toggle();
+                this.debugOverlay.setEnabled(!this.debugOverlay.isEnabled());
             }
             if (this.input.isKeyPressed("KeyC")) {
-                this.freeCamera.toggle();
+                this.freeCamera.setEnabled(!this.freeCamera.isEnabled());
             }
             // Numpad 5 to reset free camera to player
-            if (this.input.isKeyPressed("Numpad5") && this.freeCamera.enabled) {
-                const internalDims = this.renderer.getInternalDimensions();
-                this.freeCamera.resetToPlayer(player.position.x, player.position.y, internalDims.width, internalDims.height);
+            if (this.input.isKeyPressed("Numpad5") && this.freeCamera.isEnabled()) {
+                this.freeCamera.setPosition(player.position.x, player.position.y);
             }
             // Quick cheat toggles
             if (this.input.isKeyPressed("KeyG")) {
-                this.cheatManager.toggle(CheatFlag.GodMode);
+                this.cheatManager.toggle(CheatFlag.God);
             }
             if (this.input.isKeyPressed("KeyN")) {
-                this.cheatManager.toggle(CheatFlag.NoClip);
+                this.cheatManager.toggle(CheatFlag.Noclip);
             }
             if (this.input.isKeyPressed("KeyT")) {
-                this.cheatManager.toggle(CheatFlag.InfiniteTime);
+                this.cheatManager.toggle(CheatFlag.InfTime);
             }
             if (this.input.isKeyPressed("KeyS")) {
                 this.cheatManager.toggle(CheatFlag.GiveSword);
@@ -303,6 +354,29 @@ export class GameEngine {
         catch (error) {
             console.error("Error in player input handling:", error);
         }
+    }
+    /**
+     * Check if player is near a ledge for sticky grab
+     */
+    checkNearLedge(player) {
+        // Simple ledge detection - check if there's a gap in front of the player
+        const ledgeCheckDistance = 20;
+        const groundCheckDistance = 30;
+        // Check if there's ground in front of the player
+        const frontGround = this.collision.isOnGround({ ...player, position: { x: player.position.x + ledgeCheckDistance, y: player.position.y } }, this.entities.filter(e => e && e.isStatic));
+        // Check if there's no ground below the front position
+        const frontBelowGround = this.collision.isOnGround({ ...player, position: { x: player.position.x + ledgeCheckDistance, y: player.position.y + groundCheckDistance } }, this.entities.filter(e => e && e.isStatic));
+        return !frontGround && !frontBelowGround;
+    }
+    /**
+     * Handle ledge grab mechanics
+     */
+    handleLedgeGrab(player) {
+        // Simple ledge grab - snap to ledge position
+        const ledgeSnapDistance = 10;
+        player.position.x += ledgeSnapDistance;
+        player.velocity.x = 0;
+        player.velocity.y = 0;
     }
     render() {
         try {
@@ -332,7 +406,7 @@ export class GameEngine {
             let currentY = lineHeight;
             const minDimension = Math.min(internalDims.width, internalDims.height);
             // 1. FPS Display (top-left) - only if debug overlay is disabled
-            if (this.fpsDisplay && !this.debugOverlay.enabled) {
+            if (this.fpsDisplay && !this.debugOverlay.isEnabled()) {
                 this.renderer.drawText(`FPS:${this.loop.getFPS()}`, 5, currentY, `${fontMetrics.charHeight}px monospace`, "#FFF");
                 currentY += lineHeight;
             }
@@ -344,7 +418,7 @@ export class GameEngine {
             }
             // 3. Player Debug Info (only if debug overlay is disabled to avoid duplication)
             const player = this.entities[0];
-            if (player && !this.debugOverlay.enabled) {
+            if (player && !this.debugOverlay.isEnabled()) {
                 const isOnGround = this.collision.isOnGround(player, this.entities.filter(e => e && e.isStatic));
                 if (minDimension > 160) { // Not Game Boy size
                     this.renderer.drawText(`Y:${Math.round(player.position.y)}`, 5, currentY, `${fontMetrics.charHeight}px monospace`, "#FFF");
@@ -379,16 +453,24 @@ export class GameEngine {
                 bottomTexts.push({ text: instruction, color: "#FFF", priority: 1 });
             });
             // Render debug overlay (if enabled, it handles its own text positioning)
-            if (player && this.debugOverlay.enabled) {
-                this.debugOverlay.render(this.loop.getFPS(), player.position.x, player.position.y, player.velocity.x, player.velocity.y);
-                // Draw entity bounding boxes if debug overlay is enabled
-                this.debugOverlay.drawEntityBoxes(this.entities);
-                // Draw grid if debug overlay is enabled
-                this.debugOverlay.drawGrid();
+            if (player && this.debugOverlay.isEnabled()) {
+                // Update debug info
+                this.debugOverlay.update({
+                    fps: this.loop.getFPS(),
+                    playerPosition: player.position,
+                    playerState: 'idle', // Entity doesn't have state property
+                    entities: this.entities.map(e => ({
+                        id: 'entity', // Entity doesn't have id property
+                        position: e.position,
+                        bounds: e.getCollider()
+                    }))
+                }, 0); // deltaTime not available here
+                // Render the debug overlay
+                this.debugOverlay.render();
             }
             // Add cheat status (only if debug overlay is disabled)
-            if (player && !this.debugOverlay.enabled) {
-                const activeCheats = this.cheatManager.getActiveCheats();
+            if (player && !this.debugOverlay.isEnabled()) {
+                const activeCheats = this.cheatManager.getActiveFlags();
                 if (activeCheats.length > 0) {
                     const cheatText = `Cheats:${activeCheats.join(',')}`;
                     const maxChars = Math.floor(internalDims.width / fontMetrics.charWidth) - 2;
@@ -494,6 +576,12 @@ export class GameEngine {
     }
     getDebugOverlay() {
         return this.debugOverlay;
+    }
+    getInputMap() {
+        return this.input.getInputMap();
+    }
+    getGamepad() {
+        return this.input.getGamepad();
     }
     // Platform management
     setPlatform(platformKey) {

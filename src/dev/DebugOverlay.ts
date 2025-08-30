@@ -1,134 +1,242 @@
-import { Renderer } from "../engine/Renderer.js";
-import { Entity } from "../engine/Entity.js";
+import { Vec2 } from '../engine/Vector2.js';
+
+export interface DebugOverlayConfig {
+    enabled?: boolean;
+    showFPS?: boolean;
+    showPosition?: boolean;
+    showState?: boolean;
+    showFlags?: boolean;
+    showColliders?: boolean;
+    fontSize?: number;
+    fontFamily?: string;
+    backgroundColor?: string;
+    textColor?: string;
+    colliderColor?: string;
+}
+
+export interface DebugInfo {
+    fps?: number;
+    playerPosition?: Vec2;
+    playerState?: string;
+    flags?: Record<string, boolean>;
+    entities?: Array<{
+        id: string;
+        position: Vec2;
+        bounds?: { x: number; y: number; width: number; height: number };
+    }>;
+    camera?: Vec2;
+    memory?: {
+        entities: number;
+        sprites: number;
+        audio: number;
+    };
+}
 
 export class DebugOverlay {
-    public enabled = false;
+    private enabled: boolean = false;
+    private config: DebugOverlayConfig;
+    private canvas: HTMLCanvasElement | null = null;
+    private ctx: CanvasRenderingContext2D | null = null;
+    private lastFrameTime: number = 0;
+    private fpsHistory: number[] = [];
+    private debugInfo: DebugInfo = {};
 
-    constructor(private renderer: Renderer) {}
+    constructor(config: DebugOverlayConfig = {}) {
+        this.config = {
+            enabled: false,
+            showFPS: true,
+            showPosition: true,
+            showState: true,
+            showFlags: true,
+            showColliders: false,
+            fontSize: 12,
+            fontFamily: 'monospace',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            textColor: '#00FF00',
+            colliderColor: '#FF0000',
+            ...config
+        };
+    }
 
-    public render(fps: number, playerX: number, playerY: number, playerVelocityX: number, playerVelocityY: number): void {
+    /**
+     * Initialize the debug overlay
+     */
+    initialize(canvas: HTMLCanvasElement): void {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        
+        if (!this.ctx) {
+            console.error('Failed to get 2D context for debug overlay');
+            return;
+        }
+    }
+
+    /**
+     * Enable/disable debug overlay
+     */
+    setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+    }
+
+    /**
+     * Check if debug overlay is enabled
+     */
+    isEnabled(): boolean {
+        return this.enabled;
+    }
+
+    /**
+     * Update debug information
+     */
+    update(info: DebugInfo, deltaTime: number): void {
         if (!this.enabled) return;
 
-        const fontMetrics = this.renderer.getFontMetrics();
-        const internalDims = this.renderer.getInternalDimensions();
-        
-        // Use RIGHT side of screen for debug info to avoid conflicts with main text on left
-        const rightMargin = 5;
-        const lineHeight = fontMetrics.charHeight + 1;
-        let currentY = lineHeight;
-        
-        // Calculate right-aligned text position
-        const getRightAlignedX = (text: string) => {
-            const textWidth = text.length * fontMetrics.charWidth;
-            return internalDims.width - textWidth - rightMargin;
-        };
-        
-        // Only show essential info for very small resolutions
-        const minDimension = Math.min(internalDims.width, internalDims.height);
-        
-        if (minDimension <= 160) {
-            // Very compact for Game Boy - right-aligned to avoid main text
-            const fpsText = `FPS:${fps}`;
-            const posText = `P:${Math.round(playerX)},${Math.round(playerY)}`;
-            
-            this.renderer.drawText(fpsText, getRightAlignedX(fpsText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            this.renderer.drawText(posText, getRightAlignedX(posText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-        } else if (minDimension <= 256) {
-            // Compact for NES/SNES - right-aligned to avoid main text
-            const fpsText = `FPS:${fps}`;
-            const posText = `P:${Math.round(playerX)},${Math.round(playerY)}`;
-            const velText = `V:${Math.round(playerVelocityX)},${Math.round(playerVelocityY)}`;
-            
-            this.renderer.drawText(fpsText, getRightAlignedX(fpsText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            this.renderer.drawText(posText, getRightAlignedX(posText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            this.renderer.drawText(velText, getRightAlignedX(velText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-        } else {
-            // Full debug info for larger screens - right-aligned to avoid main text
-            const fpsText = `FPS: ${fps}`;
-            const posText = `P: (${playerX.toFixed(1)}, ${playerY.toFixed(1)})`;
-            const velText = `V: (${playerVelocityX.toFixed(1)}, ${playerVelocityY.toFixed(1)})`;
-            
-            this.renderer.drawText(fpsText, getRightAlignedX(fpsText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            this.renderer.drawText(posText, getRightAlignedX(posText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            this.renderer.drawText(velText, getRightAlignedX(velText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            
-            // Camera position
-            const camera = this.renderer.getCamera();
-            const camText = `Cam: (${camera.x.toFixed(1)}, ${camera.y.toFixed(1)})`;
-            this.renderer.drawText(camText, getRightAlignedX(camText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
-            currentY += lineHeight;
-            
-            // Memory usage (if available) - only for larger screens
-            if ('memory' in performance && internalDims.width > 400) {
-                const memory = (performance as any).memory;
-                const usedMB = (memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
-                const totalMB = (memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
-                const memText = `Mem: ${usedMB}MB/${totalMB}MB`;
-                this.renderer.drawText(memText, getRightAlignedX(memText), currentY, `${fontMetrics.charHeight}px monospace`, "#0F0");
+        // Calculate FPS
+        if (deltaTime > 0) {
+            const fps = 1 / deltaTime;
+            this.fpsHistory.push(fps);
+            if (this.fpsHistory.length > 60) {
+                this.fpsHistory.shift();
             }
         }
+
+        this.debugInfo = info;
     }
 
-    public drawBoundingBox(x: number, y: number, w: number, h: number, color: string = "#F00"): void {
-        if (!this.enabled) return;
-        
-        // Draw rectangle outline
-        this.renderer.drawLine(x, y, x + w, y, color, 1);
-        this.renderer.drawLine(x + w, y, x + w, y + h, color, 1);
-        this.renderer.drawLine(x + w, y + h, x, y + h, color, 1);
-        this.renderer.drawLine(x, y + h, x, y, color, 1);
-    }
+    /**
+     * Render the debug overlay
+     */
+    render(): void {
+        if (!this.enabled || !this.ctx || !this.canvas) return;
 
-    public drawEntityBoxes(entities: Entity[]): void {
-        if (!this.enabled) return;
-        
-        for (const entity of entities) {
-            if (!entity) continue;
-            
-            const collider = entity.getCollider();
-            const color = entity.isStatic ? "#00F" : "#F00"; // Blue for static, red for dynamic
-            this.drawBoundingBox(collider.x, collider.y, collider.width, collider.height, color);
+        const ctx = this.ctx;
+        const canvas = this.canvas;
+
+        // Clear the overlay area
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw background
+        if (this.config.backgroundColor) {
+            ctx.fillStyle = this.config.backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Set text style
+        ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`;
+        ctx.fillStyle = this.config.textColor || '#00FF00';
+        ctx.textBaseline = 'top';
+
+        let y = 10;
+        const lineHeight = this.config.fontSize! + 2;
+
+        // Draw FPS
+        if (this.config.showFPS && this.fpsHistory.length > 0) {
+            const avgFPS = this.fpsHistory.reduce((a, b) => a + b, 0) / this.fpsHistory.length;
+            ctx.fillText(`FPS: ${avgFPS.toFixed(1)}`, 10, y);
+            y += lineHeight;
+        }
+
+        // Draw player position
+        if (this.config.showPosition && this.debugInfo.playerPosition) {
+            const pos = this.debugInfo.playerPosition;
+            ctx.fillText(`Player: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`, 10, y);
+            y += lineHeight;
+        }
+
+        // Draw player state
+        if (this.config.showState && this.debugInfo.playerState) {
+            ctx.fillText(`State: ${this.debugInfo.playerState}`, 10, y);
+            y += lineHeight;
+        }
+
+        // Draw camera position
+        if (this.debugInfo.camera) {
+            const cam = this.debugInfo.camera;
+            ctx.fillText(`Camera: (${cam.x.toFixed(1)}, ${cam.y.toFixed(1)})`, 10, y);
+            y += lineHeight;
+        }
+
+        // Draw flags
+        if (this.config.showFlags && this.debugInfo.flags) {
+            ctx.fillText('Flags:', 10, y);
+            y += lineHeight;
+            Object.entries(this.debugInfo.flags).forEach(([key, value]) => {
+                const color = value ? '#00FF00' : '#FF0000';
+                ctx.fillStyle = color;
+                ctx.fillText(`  ${key}: ${value}`, 20, y);
+                y += lineHeight;
+            });
+            ctx.fillStyle = this.config.textColor || '#00FF00';
+        }
+
+        // Draw memory info
+        if (this.debugInfo.memory) {
+            const mem = this.debugInfo.memory;
+            ctx.fillText(`Memory: E:${mem.entities} S:${mem.sprites} A:${mem.audio}`, 10, y);
+            y += lineHeight;
+        }
+
+        // Draw colliders
+        if (this.config.showColliders && this.debugInfo.entities) {
+            this.renderColliders();
         }
     }
 
-    public drawGrid(gridSize: number = 64, color: string = "#333"): void {
-        if (!this.enabled) return;
-        
-        const camera = this.renderer.getCamera();
-        const internalDims = this.renderer.getInternalDimensions();
-        
-        // Adjust grid size based on resolution
-        const minDimension = Math.min(internalDims.width, internalDims.height);
-        if (minDimension <= 160) {
-            gridSize = 16; // Smaller grid for Game Boy
-        } else if (minDimension <= 256) {
-            gridSize = 32; // Medium grid for NES/SNES
-        }
-        
-        const startX = Math.floor(camera.x / gridSize) * gridSize;
-        const startY = Math.floor(camera.y / gridSize) * gridSize;
-        const endX = startX + internalDims.width + gridSize;
-        const endY = startY + internalDims.height + gridSize;
-        
-        // Draw vertical lines
-        for (let x = startX; x <= endX; x += gridSize) {
-            this.renderer.drawLine(x, startY, x, endY, color, 1);
-        }
-        
-        // Draw horizontal lines
-        for (let y = startY; y <= endY; y += gridSize) {
-            this.renderer.drawLine(startX, y, endX, y, color, 1);
+    /**
+     * Render collider boxes for entities
+     */
+    private renderColliders(): void {
+        if (!this.ctx || !this.debugInfo.entities) return;
+
+        const ctx = this.ctx;
+        ctx.strokeStyle = this.config.colliderColor || '#FF0000';
+        ctx.lineWidth = 1;
+
+        this.debugInfo.entities.forEach(entity => {
+            if (entity.bounds) {
+                const bounds = entity.bounds;
+                ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+                
+                // Draw entity ID
+                ctx.fillStyle = this.config.colliderColor || '#FF0000';
+                ctx.fillText(entity.id, bounds.x, bounds.y - 15);
+            }
+        });
+    }
+
+    /**
+     * Set debug configuration
+     */
+    setConfig(config: Partial<DebugOverlayConfig>): void {
+        this.config = { ...this.config, ...config };
+    }
+
+    /**
+     * Toggle a specific debug feature
+     */
+    toggleFeature(feature: keyof DebugOverlayConfig): void {
+        if (feature in this.config && typeof this.config[feature] === 'boolean') {
+            (this.config as any)[feature] = !(this.config as any)[feature];
         }
     }
 
-    public toggle(): void {
-        this.enabled = !this.enabled;
-        console.log(`Debug overlay ${this.enabled ? 'enabled' : 'disabled'}`);
+    /**
+     * Get current configuration
+     */
+    getConfig(): DebugOverlayConfig {
+        return { ...this.config };
+    }
+
+    /**
+     * Get debug info for the overlay itself
+     */
+    getDebugInfo(): Record<string, any> {
+        return {
+            enabled: this.enabled,
+            config: this.config,
+            fpsHistory: this.fpsHistory.length,
+            canvas: !!this.canvas,
+            context: !!this.ctx
+        };
     }
 } 

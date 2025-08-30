@@ -1,51 +1,239 @@
-import { Renderer } from "../engine/Renderer.js";
-import { InputHandler } from "../engine/InputHandler.js";
+import { Vec2 } from '../engine/Vector2.js';
+
+export interface FreeCameraConfig {
+    enabled?: boolean;
+    speed?: number;
+    acceleration?: number;
+    maxSpeed?: number;
+    bounds?: {
+        minX: number;
+        maxX: number;
+        minY: number;
+        maxY: number;
+    };
+}
 
 export class FreeCamera {
-  public enabled = false;
-  private camX = 0;
-  private camY = 0;
-  private speed = 300;
-  private sprintMultiplier = 3;
+    private enabled: boolean = false;
+    private position: Vec2 = new Vec2(0, 0);
+    private velocity: Vec2 = new Vec2(0, 0);
+    private target: Vec2 = new Vec2(0, 0);
+    private config: FreeCameraConfig;
+    private keys: Set<string> = new Set();
 
-  constructor(private renderer: Renderer) {}
+    constructor(config: FreeCameraConfig = {}) {
+        this.config = {
+            enabled: false,
+            speed: 200,
+            acceleration: 800,
+            maxSpeed: 400,
+            ...config
+        };
+    }
 
-  public update(input: InputHandler, dt: number): void {
-    if (!this.enabled) return;
+    /**
+     * Enable/disable free camera
+     */
+    setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+        if (!enabled) {
+            // Reset velocity when disabling
+            this.velocity = new Vec2(0, 0);
+        }
+    }
 
-    let dx = 0, dy = 0;
-    const currentSpeed = this.speed * (input.isKeyDown("ShiftLeft") ? this.sprintMultiplier : 1);
+    /**
+     * Check if free camera is enabled
+     */
+    isEnabled(): boolean {
+        return this.enabled;
+    }
 
-    // Numpad controls: 4=left, 6=right, 8=up, 2=down
-    if (input.isKeyDown("Numpad4")) dx -= currentSpeed * dt;
-    if (input.isKeyDown("Numpad6")) dx += currentSpeed * dt;
-    if (input.isKeyDown("Numpad8")) dy -= currentSpeed * dt;
-    if (input.isKeyDown("Numpad2")) dy += currentSpeed * dt;
+    /**
+     * Set camera position
+     */
+    setPosition(x: number, y: number): void {
+        this.position = new Vec2(x, y);
+        this.target = new Vec2(x, y);
+    }
 
-    this.camX += dx;
-    this.camY += dy;
+    /**
+     * Get current camera position
+     */
+    getPosition(): Vec2 {
+        return new Vec2(this.position.x, this.position.y);
+    }
 
-    this.renderer.setCamera(this.camX, this.camY);
-  }
+    /**
+     * Set camera target (for smooth movement)
+     */
+    setTarget(x: number, y: number): void {
+        this.target = new Vec2(x, y);
+    }
 
-  public toggle(): void {
-    this.enabled = !this.enabled;
-    console.log(`Free camera ${this.enabled ? 'enabled' : 'disabled'}`);
-  }
+    /**
+     * Get camera target
+     */
+    getTarget(): Vec2 {
+        return new Vec2(this.target.x, this.target.y);
+    }
 
-  public setPosition(x: number, y: number): void {
-    this.camX = x;
-    this.camY = y;
-    this.renderer.setCamera(this.camX, this.camY);
-  }
+    /**
+     * Handle key press
+     */
+    onKeyDown(key: string): void {
+        if (!this.enabled) return;
+        this.keys.add(key.toLowerCase());
+    }
 
-  public getPosition(): { x: number; y: number } {
-    return { x: this.camX, y: this.camY };
-  }
+    /**
+     * Handle key release
+     */
+    onKeyUp(key: string): void {
+        if (!this.enabled) return;
+        this.keys.delete(key.toLowerCase());
+    }
 
-  public resetToPlayer(playerX: number, playerY: number, canvasWidth: number, canvasHeight: number): void {
-    this.camX = playerX - canvasWidth / 2;
-    this.camY = playerY - canvasHeight / 2;
-    this.renderer.setCamera(this.camX, this.camY);
-  }
+    /**
+     * Update camera movement
+     */
+    update(deltaTime: number): void {
+        if (!this.enabled) return;
+
+        const speed = this.config.speed || 200;
+        const acceleration = this.config.acceleration || 800;
+        const maxSpeed = this.config.maxSpeed || 400;
+
+        // Calculate input direction
+        let inputX = 0;
+        let inputY = 0;
+
+        if (this.keys.has('w') || this.keys.has('arrowup')) {
+            inputY -= 1;
+        }
+        if (this.keys.has('s') || this.keys.has('arrowdown')) {
+            inputY += 1;
+        }
+        if (this.keys.has('a') || this.keys.has('arrowleft')) {
+            inputX -= 1;
+        }
+        if (this.keys.has('d') || this.keys.has('arrowright')) {
+            inputX += 1;
+        }
+
+        // Normalize diagonal movement
+        if (inputX !== 0 && inputY !== 0) {
+            inputX *= 0.707; // 1/√2
+            inputY *= 0.707;
+        }
+
+        // Calculate target velocity
+        const targetVelocity = new Vec2(
+            inputX * speed,
+            inputY * speed
+        );
+
+        // Smooth acceleration towards target velocity
+        const accelerationStep = acceleration * deltaTime;
+        
+        if (targetVelocity.x !== 0) {
+            this.velocity.x = this.lerp(this.velocity.x, targetVelocity.x, accelerationStep);
+        } else {
+            this.velocity.x = this.lerp(this.velocity.x, 0, accelerationStep * 2); // Faster deceleration
+        }
+
+        if (targetVelocity.y !== 0) {
+            this.velocity.y = this.lerp(this.velocity.y, targetVelocity.y, accelerationStep);
+        } else {
+            this.velocity.y = this.lerp(this.velocity.y, 0, accelerationStep * 2); // Faster deceleration
+        }
+
+        // Clamp velocity to max speed
+        const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
+        if (currentSpeed > maxSpeed) {
+            const scale = maxSpeed / currentSpeed;
+            this.velocity.x *= scale;
+            this.velocity.y *= scale;
+        }
+
+        // Update position
+        this.position.x += this.velocity.x * deltaTime;
+        this.position.y += this.velocity.y * deltaTime;
+
+        // Apply bounds if configured
+        if (this.config.bounds) {
+            const bounds = this.config.bounds;
+            this.position.x = Math.max(bounds.minX, Math.min(bounds.maxX, this.position.x));
+            this.position.y = Math.max(bounds.minY, Math.min(bounds.maxY, this.position.y));
+        }
+
+        // Update target to match position
+        this.target = new Vec2(this.position.x, this.position.y);
+    }
+
+    /**
+     * Linear interpolation helper
+     */
+    private lerp(start: number, end: number, factor: number): number {
+        return start + (end - start) * Math.min(1, factor);
+    }
+
+    /**
+     * Set camera bounds
+     */
+    setBounds(bounds: { minX: number; maxX: number; minY: number; maxY: number }): void {
+        this.config.bounds = bounds;
+    }
+
+    /**
+     * Clear camera bounds
+     */
+    clearBounds(): void {
+        this.config.bounds = undefined;
+    }
+
+    /**
+     * Set camera speed
+     */
+    setSpeed(speed: number): void {
+        this.config.speed = speed;
+    }
+
+    /**
+     * Set camera acceleration
+     */
+    setAcceleration(acceleration: number): void {
+        this.config.acceleration = acceleration;
+    }
+
+    /**
+     * Set max speed
+     */
+    setMaxSpeed(maxSpeed: number): void {
+        this.config.maxSpeed = maxSpeed;
+    }
+
+    /**
+     * Get debug info
+     */
+    getDebugInfo(): Record<string, any> {
+        return {
+            enabled: this.enabled,
+            position: { x: this.position.x, y: this.position.y },
+            velocity: { x: this.velocity.x, y: this.velocity.y },
+            target: { x: this.target.x, y: this.target.y },
+            keys: Array.from(this.keys),
+            config: this.config
+        };
+    }
+
+    /**
+     * Reset camera to origin
+     */
+    reset(): void {
+        this.position = new Vec2(0, 0);
+        this.target = new Vec2(0, 0);
+        this.velocity = new Vec2(0, 0);
+        this.keys.clear();
+    }
 } 

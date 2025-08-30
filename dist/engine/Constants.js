@@ -33,6 +33,15 @@ export const PLATFORM = {
     DEFAULT_CELL_SIZE: 64,
     BASE_SCALE_REFERENCE: 320 // Base scale relative to 320x240
 };
+// Core rendering constants
+export const RENDERER = {
+    TARGET_WIDTH: 320, // SNES-style target resolution
+    TARGET_HEIGHT: 240,
+    MIN_SCALE: 1,
+    MAX_SCALE: 8,
+    DEFAULT_SAFE_AREA: 0.03, // 3% safe area
+    STORAGE_KEY: 'pts:settings'
+};
 // Input constants
 export const INPUT = {
     MOUSE_POSITION_TOLERANCE: 0.0001,

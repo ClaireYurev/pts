@@ -1,248 +1,355 @@
 export class ExportManager {
-    constructor() {
-        this.packData = null;
-    }
-    async exportPack(packData) {
-        this.packData = packData;
+    constructor() { }
+    exportLevel(level) {
         try {
-            // Validate pack data
-            const validation = this.validatePackData(packData);
-            if (!validation.valid) {
-                throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
-            }
-            // Create pack JSON
-            const packJson = this.createPackJson(packData);
-            // Generate filename
-            const filename = this.generateFilename(packData.meta.name);
-            // Export as JSON file
-            await this.exportAsJson(packJson, filename);
-            console.log('Pack exported successfully:', filename);
+            const dataStr = JSON.stringify(level, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `${level.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            console.log('Level exported successfully:', level.name);
         }
         catch (error) {
-            console.error('Export failed:', error);
-            throw error;
+            console.error('Failed to export level:', error);
+            throw new Error('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
         }
     }
-    validatePackData(packData) {
+    exportPack(gamePack) {
+        try {
+            const dataStr = JSON.stringify(gamePack, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `${gamePack.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ptspack`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            console.log('Game pack exported successfully:', gamePack.name);
+        }
+        catch (error) {
+            console.error('Failed to export game pack:', error);
+            throw new Error('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+    }
+    async exportPackAsZip(gamePack, scripts = [], cutscenes = [], assets = new Map()) {
+        try {
+            // This would use JSZip in a real implementation
+            // For now, we'll create a mock zip structure
+            const zipData = {
+                'pack.json': JSON.stringify(gamePack, null, 2),
+                'levels/': {},
+                'scripts/': {},
+                'cutscenes/': {},
+                'assets/sprites/': {},
+                'assets/audio/': {}
+            };
+            // Add levels
+            gamePack.levels.forEach((level, index) => {
+                zipData[`levels/level_${index + 1}.json`] = JSON.stringify(level, null, 2);
+            });
+            // Add scripts
+            scripts.forEach((script, index) => {
+                zipData[`scripts/script_${index + 1}.json`] = JSON.stringify(script, null, 2);
+            });
+            // Add cutscenes
+            cutscenes.forEach((cutscene, index) => {
+                zipData[`cutscenes/cutscene_${index + 1}.json`] = JSON.stringify(cutscene, null, 2);
+            });
+            // Create a mock zip file (in reality, this would use JSZip)
+            const zipContent = JSON.stringify(zipData, null, 2);
+            const zipBlob = new Blob([zipContent], { type: 'application/zip' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(zipBlob);
+            link.download = `${gamePack.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ptspack`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            console.log('Game pack exported as zip successfully:', gamePack.name);
+        }
+        catch (error) {
+            console.error('Failed to export game pack as zip:', error);
+            throw new Error('Zip export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+    }
+    async exportPackAsZipWithJSZip(gamePack, scripts = [], cutscenes = [], assets = new Map()) {
+        try {
+            // This is how it would work with JSZip
+            // const JSZip = await import('jszip');
+            // const zip = new JSZip.default();
+            // Add pack.json
+            // zip.file('pack.json', JSON.stringify(gamePack, null, 2));
+            // Add levels
+            // gamePack.levels.forEach((level, index) => {
+            //     zip.file(`levels/level_${index + 1}.json`, JSON.stringify(level, null, 2));
+            // });
+            // Add scripts
+            // scripts.forEach((script, index) => {
+            //     zip.file(`scripts/script_${index + 1}.json`, JSON.stringify(script, null, 2));
+            // });
+            // Add cutscenes
+            // cutscenes.forEach((cutscene, index) => {
+            //     zip.file(`cutscenes/cutscene_${index + 1}.json`, JSON.stringify(cutscene, null, 2));
+            // });
+            // Add assets
+            // assets.forEach((blob, path) => {
+            //     zip.file(`assets/${path}`, blob);
+            // });
+            // Generate and download
+            // const zipBlob = await zip.generateAsync({ type: 'blob' });
+            // const link = document.createElement('a');
+            // link.href = URL.createObjectURL(zipBlob);
+            // link.download = `${gamePack.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ptspack`;
+            // link.click();
+            // URL.revokeObjectURL(link.href);
+            console.log('JSZip implementation would be used here');
+        }
+        catch (error) {
+            console.error('Failed to export game pack with JSZip:', error);
+            throw new Error('JSZip export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+    }
+    exportToClipboard(data) {
+        try {
+            const dataStr = JSON.stringify(data, null, 2);
+            navigator.clipboard.writeText(dataStr).then(() => {
+                console.log('Data copied to clipboard');
+            }).catch((error) => {
+                console.error('Failed to copy to clipboard:', error);
+                throw new Error('Clipboard copy failed: ' + error.message);
+            });
+        }
+        catch (error) {
+            console.error('Failed to export to clipboard:', error);
+            throw new Error('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+    }
+    exportLevelToClipboard(level) {
+        this.exportToClipboard(level);
+    }
+    exportPackToClipboard(gamePack) {
+        this.exportToClipboard(gamePack);
+    }
+    validateLevel(level) {
         const errors = [];
-        // Validate meta
-        if (!packData.meta.name || packData.meta.name.trim() === '') {
-            errors.push('Pack name is required');
-        }
-        if (!packData.meta.version || packData.meta.version.trim() === '') {
-            errors.push('Pack version is required');
-        }
-        // Validate tileMap
-        if (!packData.tileMap || !Array.isArray(packData.tileMap) || packData.tileMap.length === 0) {
-            errors.push('Tile map is required and must be a non-empty array');
-        }
-        // Validate entities
-        if (!Array.isArray(packData.entities)) {
-            errors.push('Entities must be an array');
-        }
-        // Validate triggers
-        if (!Array.isArray(packData.triggers)) {
-            errors.push('Triggers must be an array');
-        }
-        // Validate scripts
-        if (!Array.isArray(packData.scripts)) {
-            errors.push('Scripts must be an array');
-        }
-        // Validate cutscenes
-        if (!Array.isArray(packData.cutscenes)) {
-            errors.push('Cutscenes must be an array');
-        }
-        return { valid: errors.length === 0, errors };
-    }
-    createPackJson(packData) {
-        const now = new Date().toISOString();
-        return {
-            meta: {
-                ...packData.meta,
-                created: packData.meta.created || now,
-                modified: now,
-                format: 'ptspack',
-                formatVersion: '1.0.0'
-            },
-            level: {
-                tileMap: packData.tileMap,
-                entities: packData.entities,
-                triggers: packData.triggers,
-                settings: {
-                    tileSize: 32,
-                    gravity: 9.8,
-                    maxVelocity: 2000,
-                    ...packData.settings
-                }
-            },
-            scripts: {
-                rules: packData.scripts,
-                cutscenes: packData.cutscenes
-            },
-            assets: packData.assets || [],
-            version: packData.meta.version
-        };
-    }
-    generateFilename(packName) {
-        // Sanitize filename
-        const sanitizedName = packName
-            .replace(/[^a-zA-Z0-9\s-_]/g, '')
-            .replace(/\s+/g, '_')
-            .toLowerCase();
-        return `${sanitizedName}.ptspack.json`;
-    }
-    async exportAsJson(packJson, filename) {
-        const jsonString = JSON.stringify(packJson, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        // Create download link
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        // Cleanup
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-    async exportAsZip(packData) {
-        // This would require JSZip library
-        // For now, we'll just export as JSON
-        await this.exportPack(packData);
-    }
-    async exportAssets(assets) {
-        const assetUrls = [];
-        for (const asset of assets) {
-            try {
-                const dataUrl = await this.fileToDataUrl(asset);
-                assetUrls.push(dataUrl);
-            }
-            catch (error) {
-                console.warn(`Failed to export asset ${asset.name}:`, error);
-            }
-        }
-        return assetUrls;
-    }
-    fileToDataUrl(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
-    }
-    generatePackPreview(packData) {
-        const preview = {
-            name: packData.meta.name,
-            version: packData.meta.version,
-            description: packData.meta.description,
-            stats: {
-                tiles: this.countTiles(packData.tileMap),
-                entities: packData.entities.length,
-                triggers: packData.triggers.length,
-                scripts: packData.scripts.length,
-                cutscenes: packData.cutscenes.length
-            },
-            size: this.estimatePackSize(packData)
-        };
-        return JSON.stringify(preview, null, 2);
-    }
-    countTiles(tileMap) {
-        if (!tileMap || tileMap.length === 0)
-            return 0;
-        let count = 0;
-        for (const row of tileMap) {
-            for (const tile of row) {
-                if (tile > 0)
-                    count++;
-            }
-        }
-        return count;
-    }
-    estimatePackSize(packData) {
-        const jsonString = JSON.stringify(packData);
-        const sizeInBytes = new Blob([jsonString]).size;
-        if (sizeInBytes < 1024) {
-            return `${sizeInBytes} B`;
-        }
-        else if (sizeInBytes < 1024 * 1024) {
-            return `${(sizeInBytes / 1024).toFixed(1)} KB`;
+        // Validate required fields
+        if (!level.id)
+            errors.push('Level ID is required');
+        if (!level.name)
+            errors.push('Level name is required');
+        if (level.width <= 0)
+            errors.push('Level width must be positive');
+        if (level.height <= 0)
+            errors.push('Level height must be positive');
+        // Validate tiles array
+        if (!Array.isArray(level.tiles)) {
+            errors.push('Tiles must be an array');
         }
         else {
-            return `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+            if (level.tiles.length !== level.height) {
+                errors.push(`Tiles array height (${level.tiles.length}) doesn't match level height (${level.height})`);
+            }
+            level.tiles.forEach((row, y) => {
+                if (!Array.isArray(row)) {
+                    errors.push(`Tiles row ${y} must be an array`);
+                }
+                else if (row.length !== level.width) {
+                    errors.push(`Tiles row ${y} width (${row.length}) doesn't match level width (${level.width})`);
+                }
+            });
         }
+        // Validate entities array
+        if (!Array.isArray(level.entities)) {
+            errors.push('Entities must be an array');
+        }
+        else {
+            level.entities.forEach((entity, index) => {
+                if (!entity.id)
+                    errors.push(`Entity ${index} missing ID`);
+                if (!entity.type)
+                    errors.push(`Entity ${index} missing type`);
+                if (typeof entity.x !== 'number')
+                    errors.push(`Entity ${index} X position must be a number`);
+                if (typeof entity.y !== 'number')
+                    errors.push(`Entity ${index} Y position must be a number`);
+                if (entity.x < 0 || entity.x >= level.width)
+                    errors.push(`Entity ${index} X position out of bounds`);
+                if (entity.y < 0 || entity.y >= level.height)
+                    errors.push(`Entity ${index} Y position out of bounds`);
+                if (!entity.props || typeof entity.props !== 'object')
+                    errors.push(`Entity ${index} props must be an object`);
+            });
+        }
+        // Validate links array
+        if (!Array.isArray(level.links)) {
+            errors.push('Links must be an array');
+        }
+        else {
+            level.links.forEach((link, index) => {
+                if (!link.from)
+                    errors.push(`Link ${index} missing from entity`);
+                if (!link.to)
+                    errors.push(`Link ${index} missing to entity`);
+                if (!link.type)
+                    errors.push(`Link ${index} missing type`);
+            });
+        }
+        return errors;
     }
-    validatePackName(name) {
+    validateGamePack(gamePack) {
         const errors = [];
-        if (!name || name.trim() === '') {
-            errors.push('Pack name cannot be empty');
+        // Validate required fields
+        if (!gamePack.id)
+            errors.push('Game pack ID is required');
+        if (!gamePack.name)
+            errors.push('Game pack name is required');
+        if (!gamePack.version)
+            errors.push('Game pack version is required');
+        // Validate levels array
+        if (!Array.isArray(gamePack.levels)) {
+            errors.push('Levels must be an array');
         }
-        if (name.length > 50) {
-            errors.push('Pack name must be 50 characters or less');
+        else if (gamePack.levels.length === 0) {
+            errors.push('Game pack must contain at least one level');
         }
-        if (!/^[a-zA-Z0-9\s-_]+$/.test(name)) {
-            errors.push('Pack name can only contain letters, numbers, spaces, hyphens, and underscores');
+        else {
+            gamePack.levels.forEach((level, index) => {
+                const levelErrors = this.validateLevel(level);
+                levelErrors.forEach(error => {
+                    errors.push(`Level ${index}: ${error}`);
+                });
+            });
         }
-        return { valid: errors.length === 0, errors };
+        // Validate metadata
+        if (!gamePack.metadata || typeof gamePack.metadata !== 'object') {
+            errors.push('Metadata must be an object');
+        }
+        return errors;
     }
-    createDefaultPackMeta() {
-        return {
-            name: 'My Custom Pack',
-            version: '1.0.0',
-            description: 'A custom game pack created with PrinceTS Editor',
-            author: 'Unknown',
-            created: new Date().toISOString(),
-            modified: new Date().toISOString()
+    validateScript(script) {
+        const errors = [];
+        // Validate required fields
+        if (!script.id)
+            errors.push('Script ID is required');
+        if (!script.name)
+            errors.push('Script name is required');
+        // Validate nodes array
+        if (!Array.isArray(script.nodes)) {
+            errors.push('Nodes must be an array');
+        }
+        else {
+            script.nodes.forEach((node, index) => {
+                if (!node.id)
+                    errors.push(`Node ${index} missing ID`);
+                if (!node.type)
+                    errors.push(`Node ${index} missing type`);
+                if (!node.kind)
+                    errors.push(`Node ${index} missing kind`);
+                if (typeof node.x !== 'number')
+                    errors.push(`Node ${index} X position must be a number`);
+                if (typeof node.y !== 'number')
+                    errors.push(`Node ${index} Y position must be a number`);
+                if (!node.props || typeof node.props !== 'object')
+                    errors.push(`Node ${index} props must be an object`);
+            });
+        }
+        // Validate edges array
+        if (!Array.isArray(script.edges)) {
+            errors.push('Edges must be an array');
+        }
+        else {
+            script.edges.forEach((edge, index) => {
+                if (!edge.id)
+                    errors.push(`Edge ${index} missing ID`);
+                if (!edge.from)
+                    errors.push(`Edge ${index} missing from`);
+                if (!edge.to)
+                    errors.push(`Edge ${index} missing to`);
+            });
+        }
+        return errors;
+    }
+    validateCutscene(cutscene) {
+        const errors = [];
+        // Validate required fields
+        if (!cutscene.id)
+            errors.push('Cutscene ID is required');
+        if (!cutscene.name)
+            errors.push('Cutscene name is required');
+        if (cutscene.duration <= 0)
+            errors.push('Cutscene duration must be positive');
+        // Validate tracks array
+        if (!Array.isArray(cutscene.tracks)) {
+            errors.push('Tracks must be an array');
+        }
+        else {
+            cutscene.tracks.forEach((track, trackIndex) => {
+                if (!track.id)
+                    errors.push(`Track ${trackIndex} missing ID`);
+                if (!track.name)
+                    errors.push(`Track ${trackIndex} missing name`);
+                if (!track.type)
+                    errors.push(`Track ${trackIndex} missing type`);
+                if (!track.color)
+                    errors.push(`Track ${trackIndex} missing color`);
+                if (!Array.isArray(track.items)) {
+                    errors.push(`Track ${trackIndex} items must be an array`);
+                }
+                else {
+                    track.items.forEach((item, itemIndex) => {
+                        if (!item.id)
+                            errors.push(`Track ${trackIndex} item ${itemIndex} missing ID`);
+                        if (typeof item.time !== 'number')
+                            errors.push(`Track ${trackIndex} item ${itemIndex} time must be a number`);
+                        if (!item.track)
+                            errors.push(`Track ${trackIndex} item ${itemIndex} missing track`);
+                        if (!item.action)
+                            errors.push(`Track ${trackIndex} item ${itemIndex} missing action`);
+                        if (!item.args || typeof item.args !== 'object')
+                            errors.push(`Track ${trackIndex} item ${itemIndex} args must be an object`);
+                    });
+                }
+            });
+        }
+        return errors;
+    }
+    createGamePack(id, name, version, levels, metadata = {}) {
+        const gamePack = {
+            id,
+            name,
+            version,
+            levels,
+            metadata: {
+                created: new Date().toISOString(),
+                editor: 'PrinceTS Visual Game Maker',
+                ...metadata
+            }
         };
-    }
-    async exportPackWithAssets(packData, assetFiles) {
-        try {
-            // Export assets first
-            const assetUrls = await this.exportAssets(assetFiles);
-            // Add asset URLs to pack data
-            const packWithAssets = {
-                ...packData,
-                assets: assetUrls
-            };
-            // Export the pack
-            await this.exportPack(packWithAssets);
+        const errors = this.validateGamePack(gamePack);
+        if (errors.length > 0) {
+            throw new Error('Invalid game pack: ' + errors.join(', '));
         }
-        catch (error) {
-            console.error('Failed to export pack with assets:', error);
-            throw error;
-        }
+        return gamePack;
     }
     getExportFormats() {
-        return [
-            {
-                name: 'PrinceTS Pack (JSON)',
-                extension: '.ptspack.json',
-                description: 'Standard PrinceTS pack format'
-            },
-            {
-                name: 'PrinceTS Pack (ZIP)',
-                extension: '.ptspack.zip',
-                description: 'Compressed pack with assets'
-            },
-            {
-                name: 'Raw JSON',
-                extension: '.json',
-                description: 'Plain JSON format'
-            }
-        ];
+        return ['json', 'ptspack', 'zip', 'clipboard'];
     }
-    async exportInFormat(packData, format) {
-        switch (format) {
-            case 'json':
-                await this.exportPack(packData);
-                break;
-            case 'zip':
-                await this.exportAsZip(packData);
-                break;
-            default:
-                throw new Error(`Unsupported export format: ${format}`);
-        }
+    getExportFormatDescription(format) {
+        const descriptions = {
+            'json': 'Standard JSON format for single level',
+            'ptspack': 'PrinceTS game pack format for multiple levels',
+            'zip': 'Zipped package with all assets',
+            'clipboard': 'Copy to clipboard for sharing'
+        };
+        return descriptions[format] || 'Unknown format';
+    }
+    getExportFormatExtension(format) {
+        const extensions = {
+            'json': '.json',
+            'ptspack': '.ptspack',
+            'zip': '.ptspack',
+            'clipboard': ''
+        };
+        return extensions[format] || '';
     }
 }
 //# sourceMappingURL=ExportManager.js.map

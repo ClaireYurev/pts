@@ -1,19 +1,74 @@
 export declare enum CheatFlag {
-    GodMode = "GodMode",
-    NoClip = "NoClip",
-    InfiniteTime = "InfiniteTime",
-    GiveSword = "GiveSword",
-    SetHealth = "SetHealth"
+    God = "God",
+    Noclip = "Noclip",
+    InfTime = "InfTime",
+    GiveSword = "GiveSword"
 }
-type CheatValue = boolean | number | null;
+export interface CheatManagerConfig {
+    enabled?: boolean;
+    defaultFlags?: Partial<Record<CheatFlag, boolean>>;
+}
 export declare class CheatManager {
     private flags;
-    setCheat(flag: CheatFlag, value: CheatValue): void;
-    isActive(flag: CheatFlag): boolean;
-    getValue(flag: CheatFlag): CheatValue;
-    toggle(flag: CheatFlag): void;
-    resetAll(): void;
-    getActiveCheats(): CheatFlag[];
+    private healthOverride;
+    private config;
+    private listeners;
+    constructor(config?: CheatManagerConfig);
+    /**
+     * Set a cheat flag
+     */
+    set(flag: CheatFlag, value: boolean): void;
+    /**
+     * Check if a cheat flag is enabled
+     */
+    on(flag: CheatFlag): boolean;
+    /**
+     * Toggle a cheat flag
+     */
+    toggle(flag: CheatFlag): boolean;
+    /**
+     * Set health override (null to disable)
+     */
+    setHealthOverride(health: number | null): void;
+    /**
+     * Get current health override
+     */
+    getHealthOverride(): number | null;
+    /**
+     * Check if health override is active
+     */
+    hasHealthOverride(): boolean;
+    /**
+     * Get all active flags
+     */
+    getActiveFlags(): CheatFlag[];
+    /**
+     * Reset all cheats to default state
+     */
+    reset(): void;
+    /**
+     * Enable/disable all cheats
+     */
+    setEnabled(enabled: boolean): void;
+    /**
+     * Check if cheat system is enabled
+     */
+    isEnabled(): boolean;
+    /**
+     * Add a listener for flag changes
+     */
+    addListener(flag: CheatFlag, callback: (enabled: boolean) => void): void;
+    /**
+     * Remove a listener
+     */
+    removeListener(flag: CheatFlag, callback: (enabled: boolean) => void): void;
+    /**
+     * Notify all listeners for a flag
+     */
+    private notifyListeners;
+    /**
+     * Get debug info for overlay
+     */
+    getDebugInfo(): Record<string, any>;
 }
-export {};
 //# sourceMappingURL=CheatManager.d.ts.map

@@ -1,0 +1,32 @@
+{
+  "version": "1.0.0",
+  "packs": [
+    {
+      "id": "example",
+      "name": "Example Pack",
+      "description": "A basic example pack with simple levels",
+      "version": "1.0.0",
+      "author": "PrinceTS Team",
+      "cover": "packs/example/cover.png",
+      "path": "packs/example.ptspack.json"
+    },
+    {
+      "id": "adventure",
+      "name": "Adventure Pack",
+      "description": "An adventure-themed pack with exploration levels",
+      "version": "1.0.0",
+      "author": "PrinceTS Team",
+      "cover": "packs/adventure/cover.png",
+      "path": "packs/adventure.ptspack.json"
+    },
+    {
+      "id": "dungeon",
+      "name": "Dungeon Pack",
+      "description": "A dungeon crawler pack with challenging levels",
+      "version": "1.0.0",
+      "author": "PrinceTS Team",
+      "cover": "packs/dungeon/cover.png",
+      "path": "packs/dungeon.ptspack.json"
+    }
+  ]
+} 

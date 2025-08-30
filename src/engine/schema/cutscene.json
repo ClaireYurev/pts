@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cutscene Schema",
+  "type": "object",
+  "required": ["id", "name", "duration", "tracks", "metadata"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 300000
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "color", "items"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "type": {
+            "type": "string",
+            "enum": ["camera", "text", "sprite", "music", "wait"]
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "time", "track", "action", "args"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                "time": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "track": {
+                  "type": "string",
+                  "enum": ["camera", "text", "sprite", "music", "wait"]
+                },
+                "action": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 50
+                },
+                "args": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "duration": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["created", "editor"],
+      "properties": {
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "editor": {
+          "type": "string",
+          "const": "PrinceTS Cutscene Editor"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+} 

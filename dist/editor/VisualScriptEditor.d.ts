@@ -1,57 +1,97 @@
-export interface EcaRule {
+export interface ECANode {
     id: string;
-    event: string;
-    condition: string;
-    action: string;
-    enabled: boolean;
+    type: 'Event' | 'Condition' | 'Action';
+    kind: string;
+    x: number;
+    y: number;
+    props: Record<string, any>;
+}
+export interface ECAEdge {
+    id: string;
+    from: string;
+    to: string;
+}
+export interface ECAGraph {
+    id: string;
+    name: string;
+    nodes: ECANode[];
+    edges: ECAEdge[];
+    variables: Record<string, any>;
+}
+export interface NodeDefinition {
+    type: 'Event' | 'Condition' | 'Action';
+    kind: string;
+    name: string;
+    description: string;
+    icon: string;
+    color: string;
+    inputs: NodePort[];
+    outputs: NodePort[];
+    properties: PropertyField[];
+}
+export interface NodePort {
+    id: string;
+    name: string;
+    type: 'flow' | 'data';
+    dataType?: 'string' | 'number' | 'boolean' | 'entity' | 'position';
+}
+export interface PropertyField {
+    name: string;
+    type: 'string' | 'number' | 'boolean' | 'select' | 'entity' | 'position';
+    label: string;
+    defaultValue: any;
+    options?: string[];
+    min?: number;
+    max?: number;
+    step?: number;
     description?: string;
 }
-export interface EventType {
-    name: string;
-    description: string;
-    parameters?: string[];
-}
-export interface ActionType {
-    name: string;
-    description: string;
-    parameters?: string[];
-}
 export declare class VisualScriptEditor {
-    private rules;
-    private container;
-    private nextId;
-    private eventTypes;
-    private actionTypes;
-    constructor(container: HTMLElement);
-    private render;
-    private renderRule;
-    private setupRuleEventListeners;
+    private canvas;
+    private ctx;
+    private graph;
+    private selectedNode;
+    private draggingNode;
+    private connectingPort;
+    private hoveredNode;
+    private hoveredPort;
+    private nodeDefinitions;
+    private isDragging;
+    private lastMouseX;
+    private lastMouseY;
+    private panX;
+    private panY;
+    private zoom;
+    constructor(canvas: HTMLCanvasElement);
+    private initializeNodeDefinitions;
+    private addNodeDefinition;
+    getNodeDefinition(type: string, kind: string): NodeDefinition | undefined;
+    getAllNodeDefinitions(): NodeDefinition[];
     private setupEventListeners;
-    addRule(): void;
-    deleteRule(ruleId: string): void;
-    editRule(rule: EcaRule): void;
-    getRules(): EcaRule[];
-    exportRules(): EcaRule[];
-    loadRules(rules: EcaRule[]): void;
-    addEventType(eventType: EventType): void;
-    addActionType(actionType: ActionType): void;
-    getEventTypes(): EventType[];
-    getActionTypes(): ActionType[];
-    validateRule(rule: EcaRule): {
-        valid: boolean;
-        errors: string[];
-    };
-    validateAllRules(): {
-        valid: boolean;
-        errors: {
-            ruleId: string;
-            errors: string[];
-        }[];
-    };
-    clearAllRules(): void;
-    getRuleCount(): number;
-    getEnabledRules(): EcaRule[];
-    duplicateRule(ruleId: string): void;
-    moveRule(ruleId: string, direction: 'up' | 'down'): void;
+    private handleMouseDown;
+    private handleMouseMove;
+    private handleMouseUp;
+    private handleWheel;
+    private handleDoubleClick;
+    private getNodeAt;
+    private getPortAt;
+    private createConnection;
+    private openNodeProperties;
+    loadGraph(graph: ECAGraph): void;
+    createGraph(name: string): ECAGraph;
+    addNode(type: string, kind: string, x: number, y: number): ECANode | null;
+    removeNode(nodeId: string): void;
+    getGraph(): ECAGraph | null;
+    exportGraph(): string;
+    importGraph(json: string): void;
+    private render;
+    private drawGrid;
+    private drawNodes;
+    private drawNode;
+    private drawPorts;
+    private drawEdges;
+    private getPortPosition;
+    private drawEdge;
+    private drawConnectingLine;
 }
 //# sourceMappingURL=VisualScriptEditor.d.ts.map

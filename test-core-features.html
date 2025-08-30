@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS Core Features Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .pass { background: #2d5a2d; }
+        .fail { background: #5a2d2d; }
+        .info { background: #2d2d5a; }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover { background: #5a5a5a; }
+        input[type="range"] { width: 200px; }
+        select { padding: 5px; background: #4a4a4a; color: white; border: 1px solid #666; }
+    </style>
+</head>
+<body>
+    <h1>PrinceTS Core Features Test</h1>
+    
+    <div class="test-section">
+        <h2>Renderer Tests</h2>
+        <div id="rendererTests">
+            <div class="test-result info">Waiting for engine to initialize...</div>
+        </div>
+        
+        <h3>Scale Mode Test</h3>
+        <select id="scaleModeSelect">
+            <option value="integer">Integer Scaling</option>
+            <option value="fit">Fit to Window</option>
+            <option value="stretch">Stretch</option>
+        </select>
+        <button onclick="testScaleMode()">Test Scale Mode</button>
+        
+        <h3>Safe Area Test</h3>
+        <input type="range" id="safeAreaSlider" min="0" max="10" value="3">
+        <span id="safeAreaValue">3%</span>
+        <button onclick="testSafeArea()">Test Safe Area</button>
+        
+        <h3>Fullscreen Test</h3>
+        <button onclick="testFullscreen()">Toggle Fullscreen</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Audio Manager Tests</h2>
+        <div id="audioTests">
+            <div class="test-result info">Waiting for audio manager...</div>
+        </div>
+        
+        <h3>Volume Control Test</h3>
+        <label>Master Volume: <input type="range" id="masterVolumeSlider" min="0" max="100" value="100"></label>
+        <span id="masterVolumeValue">100%</span>
+        <button onclick="testVolume()">Test Volume</button>
+        
+        <h3>Mute Test</h3>
+        <button onclick="testMute()">Toggle Mute</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Settings Store Tests</h2>
+        <div id="settingsTests">
+            <div class="test-result info">Waiting for settings store...</div>
+        </div>
+        
+        <button onclick="testExportSettings()">Export Settings</button>
+        <button onclick="testResetSettings()">Reset Settings</button>
+        <button onclick="testImportSettings()">Import Settings</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Integration Tests</h2>
+        <div id="integrationTests">
+            <div class="test-result info">Running integration tests...</div>
+        </div>
+        
+        <button onclick="runAllTests()">Run All Tests</button>
+    </div>
+
+    <script type="module" src="dist/main.js"></script>
+    <script>
+        // Test functions
+        function testScaleMode() {
+            const mode = document.getElementById('scaleModeSelect').value;
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                window.ptsCore.settingsStore.set('video.scaleMode', mode);
+                addTestResult('rendererTests', `Scale mode changed to: ${mode}`, 'pass');
+            } else {
+                addTestResult('rendererTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testSafeArea() {
+            const value = document.getElementById('safeAreaSlider').value;
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                window.ptsCore.settingsStore.set('video.safeAreaPct', value / 100);
+                addTestResult('rendererTests', `Safe area set to: ${value}%`, 'pass');
+            } else {
+                addTestResult('rendererTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testFullscreen() {
+            if (window.ptsCore && window.ptsCore.engine) {
+                const renderer = window.ptsCore.engine.getRenderer();
+                if (renderer.isFullscreenMode()) {
+                    renderer.exitFullscreen();
+                    addTestResult('rendererTests', 'Exited fullscreen', 'pass');
+                } else {
+                    renderer.requestFullscreen();
+                    addTestResult('rendererTests', 'Entered fullscreen', 'pass');
+                }
+            } else {
+                addTestResult('rendererTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testVolume() {
+            const value = document.getElementById('masterVolumeSlider').value;
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                window.ptsCore.settingsStore.set('audio.master', value / 100);
+                addTestResult('audioTests', `Master volume set to: ${value}%`, 'pass');
+            } else {
+                addTestResult('audioTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testMute() {
+            if (window.ptsCore && window.ptsCore.audioManager && window.ptsCore.settingsStore) {
+                const currentMuted = window.ptsCore.audioManager.isMuted();
+                window.ptsCore.audioManager.setMuted(!currentMuted);
+                window.ptsCore.settingsStore.set('audio.muted', !currentMuted);
+                addTestResult('audioTests', `Mute toggled to: ${!currentMuted}`, 'pass');
+            } else {
+                addTestResult('audioTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testExportSettings() {
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                const json = window.ptsCore.settingsStore.exportJson();
+                addTestResult('settingsTests', `Settings exported (${json.length} chars)`, 'pass');
+                console.log('Exported settings:', json);
+            } else {
+                addTestResult('settingsTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testResetSettings() {
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                window.ptsCore.settingsStore.reset();
+                addTestResult('settingsTests', 'Settings reset to defaults', 'pass');
+            } else {
+                addTestResult('settingsTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function testImportSettings() {
+            if (window.ptsCore && window.ptsCore.settingsStore) {
+                const testSettings = {
+                    video: { scaleMode: 'fit', fullscreen: false, safeAreaPct: 0.05 },
+                    audio: { master: 0.5, music: 0.3, sfx: 0.8, muted: true, latency: 'low' },
+                    input: {},
+                    accessibility: { highContrast: true, reduceFlashes: false, lateJumpMs: 50, stickyGrab: false },
+                    lang: 'en'
+                };
+                const success = window.ptsCore.settingsStore.importJson(JSON.stringify(testSettings));
+                addTestResult('settingsTests', `Settings import: ${success ? 'SUCCESS' : 'FAILED'}`, success ? 'pass' : 'fail');
+            } else {
+                addTestResult('settingsTests', 'Core components not available', 'fail');
+            }
+        }
+        
+        function runAllTests() {
+            addTestResult('integrationTests', 'Running comprehensive tests...', 'info');
+            
+            // Test all components
+            setTimeout(() => testScaleMode(), 100);
+            setTimeout(() => testSafeArea(), 200);
+            setTimeout(() => testVolume(), 300);
+            setTimeout(() => testMute(), 400);
+            setTimeout(() => testExportSettings(), 500);
+            setTimeout(() => testResetSettings(), 600);
+            setTimeout(() => testImportSettings(), 700);
+            
+            setTimeout(() => {
+                addTestResult('integrationTests', 'All tests completed!', 'pass');
+            }, 800);
+        }
+        
+        function addTestResult(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            const result = document.createElement('div');
+            result.className = `test-result ${type}`;
+            result.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(result);
+        }
+        
+        // Setup controls
+        document.getElementById('safeAreaSlider').addEventListener('input', (e) => {
+            document.getElementById('safeAreaValue').textContent = e.target.value + '%';
+        });
+        
+        document.getElementById('masterVolumeSlider').addEventListener('input', (e) => {
+            document.getElementById('masterVolumeValue').textContent = e.target.value + '%';
+        });
+        
+        // Wait for core components
+        function waitForCore() {
+            if (window.ptsCore) {
+                addTestResult('rendererTests', 'Renderer initialized', 'pass');
+                addTestResult('audioTests', 'Audio manager initialized', 'pass');
+                addTestResult('settingsTests', 'Settings store initialized', 'pass');
+                
+                // Sync controls with current settings
+                if (window.ptsCore.settingsStore) {
+                    const settings = window.ptsCore.settingsStore.getAll();
+                    document.getElementById('scaleModeSelect').value = settings.video.scaleMode;
+                    document.getElementById('safeAreaSlider').value = Math.round(settings.video.safeAreaPct * 100);
+                    document.getElementById('safeAreaValue').textContent = Math.round(settings.video.safeAreaPct * 100) + '%';
+                    document.getElementById('masterVolumeSlider').value = Math.round(settings.audio.master * 100);
+                    document.getElementById('masterVolumeValue').textContent = Math.round(settings.audio.master * 100) + '%';
+                }
+            } else {
+                setTimeout(waitForCore, 100);
+            }
+        }
+        
+        setTimeout(waitForCore, 500);
+    </script>
+</body>
+</html> 

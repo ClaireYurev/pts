@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Level Schema",
+  "type": "object",
+  "required": ["id", "name", "width", "height", "tiles", "entities", "links"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "tiles": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "minItems": 1
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "x", "y", "props"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["guard", "potion", "sword", "teleporter", "crusher", "pressurePlate", "gate", "looseTile", "chopper", "region", "key", "checkpoint"]
+          },
+          "x": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "y": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "props": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "type"],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pressurePlate-gate", "teleporter-pair", "key-gate", "trigger-region", "switch-door"]
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "tiles": { "type": "array" },
+          "height": { "type": "integer" }
+        }
+      },
+      "then": {
+        "properties": {
+          "tiles": {
+            "maxItems": { "$data": "1/height" }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "tiles": { "type": "array" },
+          "width": { "type": "integer" }
+        }
+      },
+      "then": {
+        "properties": {
+          "tiles": {
+            "items": {
+              "maxItems": { "$data": "1/width" }
+            }
+          }
+        }
+      }
+    }
+  ]
+} 

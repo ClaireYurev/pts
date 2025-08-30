@@ -1,4 +1,6 @@
 import { Renderer } from "./Renderer.js";
+import { InputMap, Action } from "./input/InputMap.js";
+import { Gamepad } from "./input/Gamepad.js";
 export declare class InputHandler {
     private keys;
     private mouse;
@@ -6,6 +8,8 @@ export declare class InputHandler {
     private eventListeners;
     private resizeObserver?;
     private abortController;
+    private inputMap;
+    private gamepad;
     constructor(canvas: HTMLCanvasElement);
     private setupEventListeners;
     cleanup(): void;
@@ -31,5 +35,29 @@ export declare class InputHandler {
     };
     debugKeys(): void;
     update(): void;
+    /**
+     * Check if an action is currently pressed (new action-based API)
+     */
+    isActionDown(action: Action): boolean;
+    /**
+     * Check if an action was just pressed (new action-based API)
+     */
+    isActionPressed(action: Action): boolean;
+    /**
+     * Get the InputMap for rebinding and configuration
+     */
+    getInputMap(): InputMap;
+    /**
+     * Get the Gamepad instance for configuration
+     */
+    getGamepad(): Gamepad;
+    /**
+     * Update ground state for late jump buffer
+     */
+    updateGroundState(isOnGround: boolean): void;
+    /**
+     * Update ledge grab state for sticky grab
+     */
+    updateLedgeGrabState(isLedgeGrabActive: boolean): void;
 }
 //# sourceMappingURL=InputHandler.d.ts.map

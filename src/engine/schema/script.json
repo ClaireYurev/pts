@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ECA Script Schema",
+  "type": "object",
+  "required": ["id", "name", "nodes", "edges", "variables"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 50
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "kind", "x", "y", "props"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["Event", "Condition", "Action"]
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "x": {
+            "type": "number",
+            "minimum": -10000,
+            "maximum": 10000
+          },
+          "y": {
+            "type": "number",
+            "minimum": -10000,
+            "maximum": 10000
+          },
+          "props": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$"
+          }
+        }
+      }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+} 

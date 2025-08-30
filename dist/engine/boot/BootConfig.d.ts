@@ -1,0 +1,46 @@
+export type BootConfig = {
+    pack?: string;
+    packUrl?: string;
+    level?: number;
+    room?: number;
+    x?: number;
+    y?: number;
+    health?: number;
+    maxhealth?: number;
+    sword?: boolean;
+    time?: number;
+    seed?: number;
+    difficulty?: 'normal' | 'hard' | 'custom';
+    noclip?: boolean;
+    god?: boolean;
+    infTime?: boolean;
+    reveal?: boolean;
+    givesword?: boolean;
+    setguards?: number;
+    speed?: number;
+    fps?: number;
+    vsync?: boolean;
+    scale?: 'integer' | 'fit' | 'stretch';
+    zoom?: number;
+    fullscreen?: boolean;
+    mute?: boolean;
+    music?: boolean;
+    sfx?: boolean;
+    vol?: number;
+    latency?: 'auto' | 'low' | 'compat';
+    keys?: string;
+    deadzone?: number;
+    jumpbuf?: number;
+    sticky?: boolean;
+    hud?: boolean;
+    cutscenes?: boolean;
+    lang?: string;
+    slot?: 1 | 2 | 3 | 'Q';
+    editor?: boolean;
+};
+export declare function parseBootConfig(): {
+    config: BootConfig;
+    warnings: string[];
+};
+export declare function validateBootConfig(cfg: BootConfig): string[];
+//# sourceMappingURL=BootConfig.d.ts.map

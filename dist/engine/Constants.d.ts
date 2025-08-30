@@ -30,6 +30,14 @@ export declare const PLATFORM: {
     readonly DEFAULT_CELL_SIZE: 64;
     readonly BASE_SCALE_REFERENCE: 320;
 };
+export declare const RENDERER: {
+    readonly TARGET_WIDTH: 320;
+    readonly TARGET_HEIGHT: 240;
+    readonly MIN_SCALE: 1;
+    readonly MAX_SCALE: 8;
+    readonly DEFAULT_SAFE_AREA: number;
+    readonly STORAGE_KEY: "pts:settings";
+};
 export declare const INPUT: {
     readonly MOUSE_POSITION_TOLERANCE: 0.0001;
     readonly AXIS_MAGNITUDE_THRESHOLD: 0.0001;

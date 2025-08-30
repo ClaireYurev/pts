@@ -1,4 +1,13 @@
 import { PlatformConfig } from "./PlatformConfig.js";
+import { ScaleMode } from "./types.js";
+interface RenderableEntity {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    visible: boolean;
+    render: (ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) => void;
+}
 export declare class Renderer {
     private ctx;
     private internalCanvas;
@@ -10,12 +19,36 @@ export declare class Renderer {
     private scaleY;
     private offsetX;
     private offsetY;
+    private scaleMode;
+    private safeAreaPct;
+    private isFullscreen;
     private currentFontMetrics;
     private loadedImages;
     private isDisposed;
+    private viewport;
+    private renderableEntities;
+    private batchSize;
+    private lastFrameTime;
+    private frameTimeThreshold;
+    private cullingEnabled;
+    private batchingEnabled;
+    private renderStats;
     constructor(canvas: HTMLCanvasElement, platformKey?: string);
     private configurePlatformRendering;
     private updateScaling;
+    private enablePerformanceOptimizations;
+    addRenderableEntity(entity: RenderableEntity): void;
+    removeRenderableEntity(entity: RenderableEntity): void;
+    clearRenderableEntities(): void;
+    private updateViewport;
+    private isEntityInViewport;
+    private renderBatch;
+    render(): void;
+    getRenderStats(): typeof this.renderStats;
+    setCullingEnabled(enabled: boolean): void;
+    setBatchingEnabled(enabled: boolean): void;
+    setBatchSize(size: number): void;
+    setFrameTimeThreshold(threshold: number): void;
     clear(color?: string): void;
     drawImage(img: HTMLImageElement, x: number, y: number, width?: number, height?: number): void;
     drawText(text: string, x: number, y: number, font?: string, color?: string): void;
@@ -51,7 +84,24 @@ export declare class Renderer {
         charHeight: number;
         fontSize: string;
     };
+    setScaleMode(mode: ScaleMode): void;
+    setSafeArea(pct: number): void;
+    resizeToWindow(): void;
+    requestFullscreen(): Promise<void>;
+    exitFullscreen(): Promise<void>;
+    getScaleMode(): ScaleMode;
+    getSafeArea(): number;
+    isFullscreenMode(): boolean;
+    getCanvasSize(): {
+        width: number;
+        height: number;
+    };
+    getViewportSize(): {
+        width: number;
+        height: number;
+    };
     renderToDisplay(): void;
+    private renderUIElements;
     displayToInternal(displayX: number, displayY: number): {
         x: number;
         y: number;
@@ -77,5 +127,8 @@ export declare class Renderer {
      */
     clearImageCache(src?: string): void;
     private handleResize;
+    private handleFullscreenChange;
+    handleCanvasClick(event: MouseEvent): void;
 }
+export {};
 //# sourceMappingURL=Renderer.d.ts.map

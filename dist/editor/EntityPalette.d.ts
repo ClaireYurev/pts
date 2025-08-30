@@ -1,33 +1,40 @@
-export interface EntityType {
+export interface EntityDefinition {
+    id: string;
     name: string;
-    icon?: string;
+    icon: string;
     color: string;
-    properties?: Record<string, any>;
+    defaultProps: Record<string, any>;
+    category: string;
+    description?: string;
 }
 export declare class EntityPalette {
     private entities;
     private selectedEntity;
-    private container;
-    private onEntitySelected?;
-    constructor(container: HTMLElement, entityTypes: string[]);
-    private getDefaultColor;
-    private getDefaultProperties;
-    private render;
-    private getEntityDescription;
-    selectEntity(entityType: string): void;
+    constructor();
+    private initializeDefaultEntities;
+    selectEntity(entityId: string): void;
     getSelectedEntity(): string;
-    getEntityType(entityType: string): EntityType | undefined;
-    addEntityType(entityType: EntityType): void;
-    removeEntityType(entityType: string): void;
-    updateEntityType(entityType: string, updates: Partial<EntityType>): void;
-    getAllEntityTypes(): EntityType[];
-    setOnEntitySelected(callback: (entityType: string) => void): void;
-    clearSelection(): void;
-    private addNewEntityType;
-    private editEntityProperties;
-    exportEntityTypes(): EntityType[];
-    importEntityTypes(entityTypes: EntityType[]): void;
+    getEntityDefinition(entityId: string): EntityDefinition | undefined;
+    getAllEntities(): EntityDefinition[];
+    getEntitiesByCategory(): Record<string, EntityDefinition[]>;
+    getEntitiesInCategory(category: string): EntityDefinition[];
+    addEntity(entity: EntityDefinition): void;
+    removeEntity(entityId: string): boolean;
+    getEntityIcon(entityId: string): string;
+    getEntityColor(entityId: string): string;
+    getEntityName(entityId: string): string;
+    getEntityDescription(entityId: string): string;
+    getDefaultProps(entityId: string): Record<string, any>;
+    setDefaultProps(entityId: string, props: Record<string, any>): void;
+    createCustomEntity(id: string, name: string, icon: string, color: string, category: string, defaultProps?: Record<string, any>, description?: string): EntityDefinition;
+    searchEntities(query: string): EntityDefinition[];
+    getEntitySuggestions(partialId: string): EntityDefinition[];
+    validateEntityId(entityId: string): boolean;
     getEntityCount(): number;
-    isEmpty(): boolean;
+    getCategoryCount(): number;
+    exportEntityDefinitions(): Record<string, EntityDefinition>;
+    importEntityDefinitions(definitions: Record<string, EntityDefinition>): void;
+    getEntityCategories(): string[];
+    clear(): void;
 }
 //# sourceMappingURL=EntityPalette.d.ts.map

@@ -2,14 +2,24 @@ import { GameEngine } from "./engine/GameEngine.js";
 import { PlayState } from "./states/PlayState.js";
 import { PiMenu } from "./ui/PiMenu.js";
 import { SaveManager } from "./engine/SaveManager.js";
+import { SaveSystem } from "./engine/save/SaveSystem.js";
 import { PlatformSelector } from "./ui/PlatformSelector.js";
 import { BootConfigManager } from "./engine/BootConfig.js";
+import { bootGame, BootContext } from "./engine/boot/boot.js";
 import { GamePackLoader } from "./engine/GamePackLoader.js";
+import { AudioManager } from "./engine/AudioManager.js";
+import { SettingsStore } from "./engine/SettingsStore.js";
+import { VFS } from "./engine/assets/VFS.js";
+import { LibraryManager } from "./engine/library/LibraryManager.js";
 
 window.addEventListener("load", async () => {
     let engine: GameEngine | null = null;
     let piMenu: PiMenu | null = null;
     let platformSelector: PlatformSelector | null = null;
+    let audioManager: AudioManager | null = null;
+    let settingsStore: SettingsStore | null = null;
+    let vfs: VFS | null = null;
+    let libraryManager: LibraryManager | null = null;
     
     // Global error handler for unhandled promise rejections
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -117,60 +127,123 @@ window.addEventListener("load", async () => {
         canvas.focus();
 
         // Handle canvas focus for keyboard input
-        canvas.addEventListener("click", () => canvas.focus());
-
-        // Parse and validate boot configuration
-        console.log("Parsing boot configuration from URL parameters...");
-        const config = BootConfigManager.parse();
-        const validation = BootConfigManager.validate(config);
-        
-        if (!validation.valid) {
-            console.warn("Boot configuration validation errors:", validation.errors);
-            // Continue with defaults, but log warnings
-        }
-        
-        // Get platform from config or URL parameter or default to SNES
-        const platformKey = config.platform || new URLSearchParams(window.location.search).get('platform') || 'snes';
-        
-        engine = new GameEngine(canvas, platformKey);
-
-        // Load game pack if specified in config
-        if (config.packUrl) {
-            try {
-                // Show loading indicator
-                showLoadingIndicator("Loading game pack...");
-                
-                console.log(`Loading game pack from: ${config.packUrl}`);
-                const packLoader = new GamePackLoader();
-                const pack = await packLoader.loadPack(config.packUrl);
-                console.log("Game pack loaded successfully:", pack.name);
-                
-                // Hide loading indicator
-                hideLoadingIndicator();
-            } catch (error) {
-                console.error("Failed to load game pack:", error);
-                
-                // Show user-friendly error message
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                console.warn(`Continuing with default game state. Pack loading failed: ${errorMessage}`);
-                
-                // Hide loading indicator
-                hideLoadingIndicator();
-                
-                // Show error message to user
-                showErrorMessage(`Failed to load game pack: ${errorMessage}. Continuing with default game.`);
-                
-                // Continue with default game state
+        canvas.addEventListener("click", (e) => {
+            canvas.focus();
+            
+            // Handle canvas-rendered UI clicks in fullscreen
+            if (engine) {
+                engine.getRenderer().handleCanvasClick(e);
             }
+        });
+
+        // Initialize core components
+        engine = new GameEngine(canvas, 'snes'); // Default platform, will be overridden by boot config
+        audioManager = new AudioManager();
+        settingsStore = new SettingsStore();
+        
+        // Initialize VFS and LibraryManager
+        vfs = new VFS({
+            cacheExpiryHours: 24,
+            maxCacheSize: 100 * 1024 * 1024 // 100MB
+        });
+        
+        libraryManager = new LibraryManager({
+            vfs: vfs,
+            builtinPacksPath: 'packs/manifest.json'
+        });
+        
+        // Initialize library manager
+        try {
+            await libraryManager.initialize();
+            console.log('Library manager initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize library manager:', error);
         }
 
-        // Apply boot configuration to engine
-        console.log("Applying boot configuration...");
-        BootConfigManager.apply(config, engine);
-
-        // Initialize save manager and π menu
+        // Initialize save manager and save system
         const saveManager = new SaveManager();
-        piMenu = new PiMenu(engine.getPauseManager(), saveManager);
+        const saveSystem = new SaveSystem({
+            packId: 'default',
+            canvas: canvas,
+            thumbnailWidth: 160,
+            thumbnailHeight: 90,
+            engineVersion: '1.0.0'
+        });
+
+        // Expose core components globally for dev controls
+        (window as any).ptsCore = {
+            audioManager,
+            settingsStore,
+            engine
+        };
+
+        // Add debug function to check UI elements
+        (window as any).debugUI = () => {
+            console.log('=== UI Debug Info ===');
+            console.log('Pi button:', document.getElementById('piMenuButton'));
+            console.log('Pi menu overlay:', document.getElementById('piMenuOverlay'));
+            console.log('Platform selector overlay:', document.getElementById('platformSelectorOverlay'));
+            console.log('Dev controls:', document.getElementById('devControls'));
+            console.log('Retro info:', document.querySelector('.retro-info'));
+            console.log('Fullscreen element:', document.fullscreenElement);
+            console.log('Is fullscreen:', !!document.fullscreenElement);
+            
+            // Force Pi button to be visible
+            const piButton = document.getElementById('piMenuButton');
+            if (piButton) {
+                piButton.style.display = 'block';
+                piButton.style.visibility = 'visible';
+                piButton.style.opacity = '1';
+                piButton.style.zIndex = '9999';
+                console.log('Pi button forced to be visible');
+            } else {
+                console.error('Pi button not found!');
+            }
+        };
+
+        // Setup settings change handlers
+        settingsStore.onChange((newSettings) => {
+            if (engine) {
+                const renderer = engine.getRenderer();
+                if (renderer) {
+                    renderer.setScaleMode(newSettings.video.scaleMode);
+                    renderer.setSafeArea(newSettings.video.safeAreaPct);
+                }
+            }
+            if (audioManager) {
+                audioManager.setMasterVolume(newSettings.audio.master);
+                audioManager.setMusicVolume(newSettings.audio.music);
+                audioManager.setSfxVolume(newSettings.audio.sfx);
+                audioManager.setMuted(newSettings.audio.muted);
+                audioManager.setLatencyHint(newSettings.audio.latency);
+            }
+        });
+
+        // Run the new boot orchestrator
+        console.log("Starting new boot process...");
+        const bootContext: BootContext = {
+            engine: engine!,
+            settingsStore,
+            libraryManager,
+            saveSystem,
+            audioManager,
+            cheatManager: engine!.getCheatManager()
+        };
+        
+        const bootResult = await bootGame(bootContext);
+        
+        if (!bootResult.success) {
+            console.error("Boot process failed:", bootResult.warnings);
+            showErrorMessage(`Boot process failed: ${bootResult.warnings.join(', ')}`);
+        } else if (bootResult.warnings.length > 0) {
+            console.warn("Boot process completed with warnings:", bootResult.warnings);
+        }
+
+        // Initialize π menu
+        
+        piMenu = new PiMenu(engine.getPauseManager(), saveManager, settingsStore);
+        piMenu.setSaveSystem(saveSystem);
+        piMenu.setLibraryManager(libraryManager);
         
         // Initialize platform selector
         platformSelector = new PlatformSelector();
@@ -230,6 +303,67 @@ window.addEventListener("load", async () => {
             }
         }
 
+        // Update UI visibility based on fullscreen state
+        function updateUIVisibility(isFullscreen: boolean) {
+            console.log(`updateUIVisibility called with isFullscreen: ${isFullscreen}`);
+            
+            // Update dev controls visibility
+            const devControls = document.getElementById('devControls');
+            if (devControls) {
+                devControls.style.display = isFullscreen ? 'none' : 'block';
+                console.log(`Dev controls ${isFullscreen ? 'hidden' : 'shown'}`);
+            } else {
+                console.warn('Dev controls element not found');
+            }
+
+            // Update retro info visibility
+            const retroInfo = document.querySelector('.retro-info');
+            if (retroInfo) {
+                (retroInfo as HTMLElement).style.display = isFullscreen ? 'none' : 'block';
+                console.log(`Retro info ${isFullscreen ? 'hidden' : 'shown'}`);
+            } else {
+                console.warn('Retro info element not found');
+            }
+
+            // Update Pi menu button visibility (should always be visible)
+            const piButton = document.getElementById('piMenuButton');
+            if (piButton) {
+                piButton.style.display = 'block';
+                piButton.style.zIndex = isFullscreen ? '9999' : '999';
+                console.log(`Pi button z-index set to ${isFullscreen ? '9999' : '999'}`);
+            } else {
+                console.warn('Pi button element not found');
+            }
+
+            // Update platform selector overlay z-index
+            const platformSelectorOverlay = document.getElementById('platformSelectorOverlay');
+            if (platformSelectorOverlay) {
+                platformSelectorOverlay.style.zIndex = isFullscreen ? '9999' : '2000';
+                console.log(`Platform selector z-index set to ${isFullscreen ? '9999' : '2000'}`);
+            } else {
+                console.warn('Platform selector overlay not found');
+            }
+
+            // Update Pi menu overlay z-index
+            const piMenuOverlayElement = document.getElementById('piMenuOverlay');
+            if (piMenuOverlayElement) {
+                piMenuOverlayElement.style.zIndex = isFullscreen ? '9999' : '1000';
+                console.log(`Pi menu overlay z-index set to ${isFullscreen ? '9999' : '1000'}`);
+            } else {
+                console.warn('Pi menu overlay not found');
+            }
+
+            // Update PiMenu and PlatformSelector z-index using their methods
+            if (piMenu) {
+                piMenu.updateZIndexForFullscreen(isFullscreen);
+            }
+            if (platformSelector) {
+                platformSelector.updateZIndexForFullscreen(isFullscreen);
+            }
+
+            console.log(`UI visibility updated for fullscreen: ${isFullscreen}`);
+        }
+
         updatePlatformInfo();
 
         // Handle canvas focus on window focus
@@ -240,6 +374,79 @@ window.addEventListener("load", async () => {
                 }
             } catch (error) {
                 console.warn("Failed to focus canvas on window focus:", error);
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener("resize", () => {
+            if (engine) {
+                engine.getRenderer().resizeToWindow();
+            }
+        });
+
+        // Handle fullscreen toggle and mute
+        document.addEventListener("keydown", (e) => {
+            if (e.key === 'f' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                if (engine && settingsStore) {
+                    const renderer = engine.getRenderer();
+                    
+                    if (renderer.isFullscreenMode()) {
+                        renderer.exitFullscreen().then(() => {
+                            settingsStore!.set('video.fullscreen', false);
+                        }).catch(console.error);
+                    } else {
+                        renderer.requestFullscreen().then(() => {
+                            settingsStore!.set('video.fullscreen', true);
+                        }).catch(console.error);
+                    }
+                }
+            }
+            
+            // Mute toggle
+            if (e.key === 'm' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                if (audioManager && settingsStore) {
+                    const currentMuted = audioManager.isMuted();
+                    audioManager.setMuted(!currentMuted);
+                    settingsStore.set('audio.muted', !currentMuted);
+                }
+            }
+        });
+
+        // Handle fullscreen change events to manage UI visibility
+        document.addEventListener('fullscreenchange', () => {
+            const isFullscreen = !!document.fullscreenElement;
+            console.log(`Fullscreen state changed: ${isFullscreen}`);
+            
+            // Check if fullscreen container exists
+            const fullscreenContainer = document.getElementById('fullscreenContainer');
+            if (isFullscreen && fullscreenContainer) {
+                console.log('Fullscreen container detected, UI elements should be visible');
+            }
+        });
+
+        // Also listen for webkit fullscreen changes (Safari)
+        document.addEventListener('webkitfullscreenchange', () => {
+            const isFullscreen = !!(document as any).webkitFullscreenElement;
+            console.log(`Webkit fullscreen state changed: ${isFullscreen}`);
+            
+            // Check if fullscreen container exists
+            const fullscreenContainer = document.getElementById('fullscreenContainer');
+            if (isFullscreen && fullscreenContainer) {
+                console.log('Fullscreen container detected, UI elements should be visible');
+            }
+        });
+
+        // Also listen for moz fullscreen changes (Firefox)
+        document.addEventListener('mozfullscreenchange', () => {
+            const isFullscreen = !!(document as any).mozFullScreenElement;
+            console.log(`Moz fullscreen state changed: ${isFullscreen}`);
+            
+            // Check if fullscreen container exists
+            const fullscreenContainer = document.getElementById('fullscreenContainer');
+            if (isFullscreen && fullscreenContainer) {
+                console.log('Fullscreen container detected, UI elements should be visible');
             }
         });
 
@@ -265,6 +472,33 @@ window.addEventListener("load", async () => {
                 e.preventDefault();
                 if (platformSelector && !platformSelector.isPlatformSelectorVisible()) {
                     platformSelector.show();
+                }
+            }
+            
+            // Dev panel toggle (backtick/tilde key)
+            if (e.key === '`' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                const devControls = document.getElementById('devControls');
+                if (devControls) {
+                    const isVisible = devControls.style.display !== 'none';
+                    devControls.style.display = isVisible ? 'none' : 'block';
+                    console.log(`Dev panel ${isVisible ? 'hidden' : 'shown'}`);
+                }
+            }
+            
+            // Pi menu (Escape key)
+            if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                if (piMenu) {
+                    piMenu.toggle();
+                }
+            }
+            
+            // Debug UI (D key)
+            if (e.key === 'd' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                if ((window as any).debugUI) {
+                    (window as any).debugUI();
                 }
             }
         });
@@ -295,6 +529,12 @@ window.addEventListener("load", async () => {
                 }
                 if (platformSelector) {
                     platformSelector.cleanup();
+                }
+                if (audioManager) {
+                    audioManager.cleanup();
+                }
+                if (settingsStore) {
+                    settingsStore.clearChangeCallbacks();
                 }
                 
                 // Remove global error handlers

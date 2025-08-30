@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS Performance Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        
+        .test-title {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+        
+        .test-description {
+            margin-bottom: 15px;
+            color: #ccc;
+        }
+        
+        .test-controls {
+            margin-bottom: 15px;
+        }
+        
+        .test-controls button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-right: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .test-controls button:hover {
+            background: #45a049;
+        }
+        
+        .test-controls button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .test-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .stat-item {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .test-canvas {
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            background: #000;
+        }
+        
+        .browser-info {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .browser-info h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .browser-info ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .browser-info li {
+            margin-bottom: 5px;
+        }
+        
+        .performance-warning {
+            background: #ff9800;
+            color: #000;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .performance-error {
+            background: #f44336;
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>PrinceTS Performance Test</h1>
+        
+        <div class="browser-info">
+            <h3>Browser Information</h3>
+            <ul>
+                <li><strong>User Agent:</strong> <span id="userAgent"></span></li>
+                <li><strong>Platform:</strong> <span id="platform"></span></li>
+                <li><strong>Hardware Concurrency:</strong> <span id="cores"></span></li>
+                <li><strong>Memory:</strong> <span id="memory"></span></li>
+                <li><strong>Device Pixel Ratio:</strong> <span id="dpr"></span></li>
+                <li><strong>Service Worker Support:</strong> <span id="swSupport"></span></li>
+            </ul>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">Rendering Performance Test</div>
+            <div class="test-description">
+                Test viewport culling and batched rendering with many entities.
+            </div>
+            
+            <div class="test-controls">
+                <button id="startRenderTest">Start Test</button>
+                <button id="stopRenderTest" disabled>Stop Test</button>
+                <button id="addEntities">Add 100 Entities</button>
+                <button id="clearEntities">Clear All</button>
+                <button id="toggleCulling">Toggle Culling</button>
+                <button id="toggleBatching">Toggle Batching</button>
+            </div>
+            
+            <div class="test-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="fps">0</div>
+                    <div class="stat-label">FPS</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="totalEntities">0</div>
+                    <div class="stat-label">Total Entities</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="renderedEntities">0</div>
+                    <div class="stat-label">Rendered</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="culledEntities">0</div>
+                    <div class="stat-label">Culled</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="renderTime">0ms</div>
+                    <div class="stat-label">Render Time</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="batches">0</div>
+                    <div class="stat-label">Batches</div>
+                </div>
+            </div>
+            
+            <canvas id="renderTestCanvas" class="test-canvas" width="800" height="600"></canvas>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">Game Loop Performance Test</div>
+            <div class="test-description">
+                Test fixed timestep and update throttling.
+            </div>
+            
+            <div class="test-controls">
+                <button id="startLoopTest">Start Test</button>
+                <button id="stopLoopTest" disabled>Stop Test</button>
+                <button id="toggleFixedTimestep">Toggle Fixed Timestep</button>
+                <button id="toggleThrottling">Toggle Throttling</button>
+                <button id="applyOptimalSettings">Apply Optimal Settings</button>
+            </div>
+            
+            <div class="test-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="loopFps">0</div>
+                    <div class="stat-label">Loop FPS</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="updateRate">0</div>
+                    <div class="stat-label">Update Rate</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="fixedTimestep">Off</div>
+                    <div class="stat-label">Fixed Timestep</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="throttling">Off</div>
+                    <div class="stat-label">Throttling</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="accumulator">0</div>
+                    <div class="stat-label">Accumulator</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="browser">Unknown</div>
+                    <div class="stat-label">Browser</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <div class="test-title">Service Worker Test</div>
+            <div class="test-description">
+                Test offline caching and background sync.
+            </div>
+            
+            <div class="test-controls">
+                <button id="registerSW">Register Service Worker</button>
+                <button id="unregisterSW">Unregister Service Worker</button>
+                <button id="updateSW">Update Service Worker</button>
+                <button id="clearCache">Clear Cache</button>
+                <button id="testOffline">Test Offline</button>
+            </div>
+            
+            <div class="test-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="swRegistered">No</div>
+                    <div class="stat-label">Registered</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="swControlled">No</div>
+                    <div class="stat-label">Controlled</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="swSupported">No</div>
+                    <div class="stat-label">Supported</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="cacheSize">0KB</div>
+                    <div class="stat-label">Cache Size</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GameEngine } from './dist/engine/GameEngine.js';
+        import { ServiceWorkerManager } from './dist/engine/ServiceWorkerManager.js';
+
+        // Browser detection
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        document.getElementById('platform').textContent = navigator.platform;
+        document.getElementById('cores').textContent = navigator.hardwareConcurrency || 'Unknown';
+        document.getElementById('memory').textContent = navigator.deviceMemory ? `${navigator.deviceMemory}GB` : 'Unknown';
+        document.getElementById('dpr').textContent = window.devicePixelRatio || 1;
+        document.getElementById('swSupport').textContent = 'serviceWorker' in navigator ? 'Yes' : 'No';
+
+        // Performance test variables
+        let gameEngine = null;
+        let serviceWorkerManager = null;
+        let renderTestRunning = false;
+        let loopTestRunning = false;
+        let testEntities = [];
+
+        // Initialize Service Worker Manager
+        serviceWorkerManager = new ServiceWorkerManager({
+            enabled: true,
+            cacheStaticAssets: true,
+            cacheGamePacks: true,
+            backgroundSync: false,
+            pushNotifications: false
+        });
+
+        // Render Performance Test
+        document.getElementById('startRenderTest').addEventListener('click', startRenderTest);
+        document.getElementById('stopRenderTest').addEventListener('click', stopRenderTest);
+        document.getElementById('addEntities').addEventListener('click', addTestEntities);
+        document.getElementById('clearEntities').addEventListener('click', clearTestEntities);
+        document.getElementById('toggleCulling').addEventListener('click', toggleCulling);
+        document.getElementById('toggleBatching').addEventListener('click', toggleBatching);
+
+        function startRenderTest() {
+            const canvas = document.getElementById('renderTestCanvas');
+            gameEngine = new GameEngine(canvas);
+            
+            // Add some test entities
+            addTestEntities();
+            
+            renderTestRunning = true;
+            document.getElementById('startRenderTest').disabled = true;
+            document.getElementById('stopRenderTest').disabled = false;
+            
+            // Start the game loop
+            gameEngine.start();
+            
+            // Update stats
+            updateRenderStats();
+        }
+
+        function stopRenderTest() {
+            if (gameEngine) {
+                gameEngine.stop();
+                gameEngine = null;
+            }
+            
+            renderTestRunning = false;
+            document.getElementById('startRenderTest').disabled = false;
+            document.getElementById('stopRenderTest').disabled = true;
+        }
+
+        function addTestEntities() {
+            if (!gameEngine) return;
+            
+            // Add 100 random entities
+            for (let i = 0; i < 100; i++) {
+                const entity = {
+                    x: Math.random() * 2000,
+                    y: Math.random() * 2000,
+                    width: 16 + Math.random() * 32,
+                    height: 16 + Math.random() * 32,
+                    visible: true,
+                    render: (ctx, cameraX, cameraY) => {
+                        ctx.fillStyle = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                        ctx.fillRect(entity.x - cameraX, entity.y - cameraY, entity.width, entity.height);
+                    }
+                };
+                
+                gameEngine.renderer.addRenderableEntity(entity);
+                testEntities.push(entity);
+            }
+        }
+
+        function clearTestEntities() {
+            if (gameEngine) {
+                gameEngine.renderer.clearRenderableEntities();
+            }
+            testEntities = [];
+        }
+
+        function toggleCulling() {
+            if (gameEngine) {
+                const enabled = gameEngine.renderer.getRenderStats().culledEntities > 0;
+                gameEngine.renderer.setCullingEnabled(!enabled);
+                console.log('Culling:', !enabled ? 'enabled' : 'disabled');
+            }
+        }
+
+        function toggleBatching() {
+            if (gameEngine) {
+                const stats = gameEngine.renderer.getRenderStats();
+                const enabled = stats.batches > 0;
+                gameEngine.renderer.setBatchingEnabled(!enabled);
+                console.log('Batching:', !enabled ? 'enabled' : 'disabled');
+            }
+        }
+
+        function updateRenderStats() {
+            if (!gameEngine || !renderTestRunning) return;
+            
+            const stats = gameEngine.renderer.getRenderStats();
+            const loopStats = gameEngine.loop.getPerformanceStats();
+            
+            document.getElementById('fps').textContent = loopStats.fps;
+            document.getElementById('totalEntities').textContent = stats.totalEntities;
+            document.getElementById('renderedEntities').textContent = stats.renderedEntities;
+            document.getElementById('culledEntities').textContent = stats.culledEntities;
+            document.getElementById('renderTime').textContent = `${stats.frameTime.toFixed(1)}ms`;
+            document.getElementById('batches').textContent = stats.batches;
+            
+            requestAnimationFrame(updateRenderStats);
+        }
+
+        // Game Loop Performance Test
+        document.getElementById('startLoopTest').addEventListener('click', startLoopTest);
+        document.getElementById('stopLoopTest').addEventListener('click', stopLoopTest);
+        document.getElementById('toggleFixedTimestep').addEventListener('click', toggleFixedTimestep);
+        document.getElementById('toggleThrottling').addEventListener('click', toggleThrottling);
+        document.getElementById('applyOptimalSettings').addEventListener('click', applyOptimalSettings);
+
+        function startLoopTest() {
+            if (!gameEngine) {
+                const canvas = document.getElementById('renderTestCanvas');
+                gameEngine = new GameEngine(canvas);
+            }
+            
+            loopTestRunning = true;
+            document.getElementById('startLoopTest').disabled = true;
+            document.getElementById('stopLoopTest').disabled = false;
+            
+            gameEngine.start();
+            updateLoopStats();
+        }
+
+        function stopLoopTest() {
+            if (gameEngine) {
+                gameEngine.stop();
+            }
+            
+            loopTestRunning = false;
+            document.getElementById('startLoopTest').disabled = false;
+            document.getElementById('stopLoopTest').disabled = true;
+        }
+
+        function toggleFixedTimestep() {
+            if (gameEngine) {
+                const enabled = gameEngine.loop.isFixedTimestepEnabled();
+                gameEngine.loop.setFixedTimestep(!enabled);
+                console.log('Fixed timestep:', !enabled ? 'enabled' : 'disabled');
+            }
+        }
+
+        function toggleThrottling() {
+            if (gameEngine) {
+                const enabled = gameEngine.loop.isUpdateThrottlingEnabled();
+                gameEngine.loop.setUpdateThrottling(!enabled);
+                console.log('Throttling:', !enabled ? 'enabled' : 'disabled');
+            }
+        }
+
+        function applyOptimalSettings() {
+            if (gameEngine) {
+                gameEngine.loop.applyOptimalSettings();
+                console.log('Applied optimal settings for current browser');
+            }
+        }
+
+        function updateLoopStats() {
+            if (!gameEngine || !loopTestRunning) return;
+            
+            const stats = gameEngine.loop.getPerformanceStats();
+            
+            document.getElementById('loopFps').textContent = stats.fps;
+            document.getElementById('updateRate').textContent = Math.round(1 / (stats.fixedTimestep ? 1/60 : 1/30));
+            document.getElementById('fixedTimestep').textContent = stats.fixedTimestep ? 'On' : 'Off';
+            document.getElementById('throttling').textContent = stats.throttling ? 'On' : 'Off';
+            document.getElementById('accumulator').textContent = stats.accumulator.toFixed(3);
+            document.getElementById('browser').textContent = stats.browser;
+            
+            requestAnimationFrame(updateLoopStats);
+        }
+
+        // Service Worker Test
+        document.getElementById('registerSW').addEventListener('click', registerServiceWorker);
+        document.getElementById('unregisterSW').addEventListener('click', unregisterServiceWorker);
+        document.getElementById('updateSW').addEventListener('click', updateServiceWorker);
+        document.getElementById('clearCache').addEventListener('click', clearCache);
+        document.getElementById('testOffline').addEventListener('click', testOffline);
+
+        async function registerServiceWorker() {
+            const success = await serviceWorkerManager.register();
+            updateSWStats();
+            
+            if (success) {
+                console.log('Service Worker registered successfully');
+            } else {
+                console.error('Service Worker registration failed');
+            }
+        }
+
+        async function unregisterServiceWorker() {
+            const success = await serviceWorkerManager.unregister();
+            updateSWStats();
+            
+            if (success) {
+                console.log('Service Worker unregistered successfully');
+            } else {
+                console.error('Service Worker unregistration failed');
+            }
+        }
+
+        async function updateServiceWorker() {
+            await serviceWorkerManager.update();
+            console.log('Service Worker update requested');
+        }
+
+        async function clearCache() {
+            await serviceWorkerManager.clearCache();
+            updateSWStats();
+            console.log('Cache cleared');
+        }
+
+        async function testOffline() {
+            // Simulate offline test
+            const response = await fetch('/test-offline');
+            if (response.ok) {
+                console.log('Offline test: Content available from cache');
+            } else {
+                console.log('Offline test: Content not available');
+            }
+        }
+
+        function updateSWStats() {
+            document.getElementById('swRegistered').textContent = serviceWorkerManager.isRegistered() ? 'Yes' : 'No';
+            document.getElementById('swControlled').textContent = serviceWorkerManager.isControlled() ? 'Yes' : 'No';
+            document.getElementById('swSupported').textContent = serviceWorkerManager.isSupported() ? 'Yes' : 'No';
+            
+            // Get cache size (simplified)
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    document.getElementById('cacheSize').textContent = `${cacheNames.length} caches`;
+                });
+            }
+        }
+
+        // Initialize stats
+        updateSWStats();
+    </script>
+</body>
+</html> 

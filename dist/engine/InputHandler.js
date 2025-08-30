@@ -1,3 +1,5 @@
+import { InputMap } from "./input/InputMap.js";
+import { Gamepad } from "./input/Gamepad.js";
 export class InputHandler {
     constructor(canvas) {
         this.keys = {};
@@ -5,7 +7,11 @@ export class InputHandler {
         this.previousKeys = {};
         this.eventListeners = [];
         this.abortController = new AbortController();
+        // Initialize new input system
+        this.inputMap = new InputMap();
+        this.gamepad = new Gamepad();
         this.setupEventListeners(canvas);
+        this.gamepad.start();
     }
     setupEventListeners(canvas) {
         // Keyboard events
@@ -69,6 +75,12 @@ export class InputHandler {
     }
     cleanup() {
         try {
+            // Stop gamepad polling
+            this.gamepad.stop();
+            // Cleanup InputMap
+            this.inputMap.cleanup();
+            // Cleanup gamepad
+            this.gamepad.cleanup();
             // Abort all event listeners using AbortController
             this.abortController.abort();
             // Fallback: manually remove all event listeners
@@ -81,15 +93,11 @@ export class InputHandler {
                 }
             }
             this.eventListeners = [];
-            // Disconnect resize observer if it exists
+            // Cleanup resize observer
             if (this.resizeObserver) {
                 this.resizeObserver.disconnect();
                 this.resizeObserver = undefined;
             }
-            // Reset all key states
-            this.keys = {};
-            this.previousKeys = {};
-            this.mouse = { x: 0, y: 0, down: false };
             console.log("InputHandler cleanup completed successfully");
         }
         catch (error) {
@@ -202,6 +210,46 @@ export class InputHandler {
     update() {
         // Store previous frame's key states
         this.previousKeys = { ...this.keys };
+        // Update gamepad state
+        this.gamepad.poll();
+        // Update InputMap with gamepad state
+        this.inputMap.updateGamepadState();
+    }
+    /**
+     * Check if an action is currently pressed (new action-based API)
+     */
+    isActionDown(action) {
+        return this.inputMap.isDown(action);
+    }
+    /**
+     * Check if an action was just pressed (new action-based API)
+     */
+    isActionPressed(action) {
+        return this.inputMap.isPressed(action);
+    }
+    /**
+     * Get the InputMap for rebinding and configuration
+     */
+    getInputMap() {
+        return this.inputMap;
+    }
+    /**
+     * Get the Gamepad instance for configuration
+     */
+    getGamepad() {
+        return this.gamepad;
+    }
+    /**
+     * Update ground state for late jump buffer
+     */
+    updateGroundState(isOnGround) {
+        this.inputMap.updateGroundState(isOnGround);
+    }
+    /**
+     * Update ledge grab state for sticky grab
+     */
+    updateLedgeGrabState(isLedgeGrabActive) {
+        this.inputMap.updateLedgeGrabState(isLedgeGrabActive);
     }
 }
 //# sourceMappingURL=InputHandler.js.map

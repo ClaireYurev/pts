@@ -37,6 +37,16 @@ export const PLATFORM = {
     BASE_SCALE_REFERENCE: 320 // Base scale relative to 320x240
 } as const;
 
+// Core rendering constants
+export const RENDERER = {
+    TARGET_WIDTH: 320,  // SNES-style target resolution
+    TARGET_HEIGHT: 240,
+    MIN_SCALE: 1,
+    MAX_SCALE: 8,
+    DEFAULT_SAFE_AREA: 0.03 as number, // 3% safe area
+    STORAGE_KEY: 'pts:settings'
+} as const;
+
 // Input constants
 export const INPUT = {
     MOUSE_POSITION_TOLERANCE: 0.0001,

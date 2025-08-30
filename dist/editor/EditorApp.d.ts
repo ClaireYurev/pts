@@ -1,32 +1,68 @@
-import { LevelCanvas } from "./LevelCanvas";
-import { TriggerManager } from "./TriggerManager";
+export interface EntityData {
+    id: string;
+    type: string;
+    x: number;
+    y: number;
+    props: Record<string, any>;
+}
+export interface LevelData {
+    id: string;
+    name: string;
+    width: number;
+    height: number;
+    tiles: string[][];
+    entities: EntityData[];
+    links: Array<{
+        from: string;
+        to: string;
+        type: string;
+    }>;
+}
+export interface GamePack {
+    id: string;
+    name: string;
+    version: string;
+    levels: LevelData[];
+    metadata: Record<string, any>;
+}
 export declare class EditorApp {
-    private levelCanvas;
+    private canvas;
     private tilePalette;
     private entityPalette;
-    private triggerManager;
-    private scriptEditor;
-    private cutsceneEditor;
+    private inspector;
+    private linkTool;
     private exportManager;
     private importManager;
-    private currentMode;
-    private selectedTileId;
+    private playtestBridge;
+    private currentLevel;
+    private selectedTool;
     private selectedEntity;
-    private selectedTrigger;
+    private isInitialized;
     constructor();
-    private createSampleTileImages;
+    private initializeComponents;
     private setupEventListeners;
-    private setupModeSwitching;
-    private setupTabSwitching;
+    private createDefaultLevel;
+    private selectTool;
     private switchTab;
-    private setMode;
-    private showContextMenu;
-    private editSelectedObject;
-    private deleteSelectedObject;
-    private exportCurrentPack;
-    private importPack;
-    loadPackData(packData: any): void;
-    getLevelCanvas(): LevelCanvas;
-    getTriggerManager(): TriggerManager;
+    private selectTile;
+    private selectEntity;
+    private handleTileClick;
+    private handleEntityClick;
+    private handleEntityPlace;
+    private paintTile;
+    private eraseTile;
+    private selectTileAt;
+    private getDefaultProps;
+    private generateId;
+    private importLevel;
+    private exportLevel;
+    private playtest;
+    private closePlaytest;
+    private loadLevel;
+    private updateStatus;
+    getCurrentLevel(): LevelData;
+    getSelectedEntity(): EntityData | null;
+    updateEntity(entity: EntityData): void;
+    deleteEntity(entityId: string): void;
 }
 //# sourceMappingURL=EditorApp.d.ts.map

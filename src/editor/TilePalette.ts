@@ -1,188 +1,246 @@
+export interface TileDefinition {
+    id: string;
+    name: string;
+    color: string;
+    icon?: string;
+    properties?: Record<string, any>;
+}
+
 export class TilePalette {
-  private tiles: HTMLImageElement[];
-  private selectedTileId = 0;
-  private container: HTMLElement;
-  private onTileSelected?: (tileId: number) => void;
+    private tiles: Map<string, TileDefinition> = new Map();
+    private selectedTile: string = 'ground';
 
-  constructor(container: HTMLElement, tiles: HTMLImageElement[]) {
-    this.container = container;
-    this.tiles = tiles;
-    this.render();
-  }
-
-  private render(): void {
-    this.container.innerHTML = '';
-    this.container.className = 'tile-palette';
-    
-    // Add header
-    const header = document.createElement('div');
-    header.className = 'palette-header';
-    header.textContent = 'Tiles';
-    this.container.appendChild(header);
-
-    // Create tile grid
-    const tileGrid = document.createElement('div');
-    tileGrid.className = 'tile-grid';
-    
-    this.tiles.forEach((img, id) => {
-      const tileContainer = document.createElement('div');
-      tileContainer.className = 'tile-item';
-      tileContainer.dataset.tileId = id.toString();
-      
-      const thumb = document.createElement('img');
-      thumb.src = img.src;
-      thumb.className = 'tile-thumbnail';
-      thumb.alt = `Tile ${id}`;
-      
-      const label = document.createElement('div');
-      label.className = 'tile-label';
-      label.textContent = `Tile ${id}`;
-      
-      tileContainer.appendChild(thumb);
-      tileContainer.appendChild(label);
-      
-      // Add click handler
-      tileContainer.addEventListener('click', () => {
-        this.selectTile(id);
-      });
-      
-      tileGrid.appendChild(tileContainer);
-    });
-    
-    this.container.appendChild(tileGrid);
-    
-    // Select first tile by default
-    if (this.tiles.length > 0) {
-      this.selectTile(0);
+    constructor() {
+        this.initializeDefaultTiles();
     }
-  }
 
-  public selectTile(tileId: number): void {
-    if (tileId < 0 || tileId >= this.tiles.length) return;
-    
-    // Remove previous selection
-    const prevSelected = this.container.querySelector('.tile-item.selected');
-    if (prevSelected) {
-      prevSelected.classList.remove('selected');
+    private initializeDefaultTiles(): void {
+        const defaultTiles: TileDefinition[] = [
+            {
+                id: 'empty',
+                name: 'Empty',
+                color: '#1a1a1a',
+                properties: { walkable: true, solid: false }
+            },
+            {
+                id: 'ground',
+                name: 'Ground',
+                color: '#8B4513',
+                properties: { walkable: true, solid: true }
+            },
+            {
+                id: 'wall',
+                name: 'Wall',
+                color: '#696969',
+                properties: { walkable: false, solid: true }
+            },
+            {
+                id: 'platform',
+                name: 'Platform',
+                color: '#A0522D',
+                properties: { walkable: true, solid: true, platform: true }
+            },
+            {
+                id: 'spike',
+                name: 'Spike',
+                color: '#FF4500',
+                properties: { walkable: false, solid: false, damage: 50 }
+            },
+            {
+                id: 'water',
+                name: 'Water',
+                color: '#4169E1',
+                properties: { walkable: false, solid: false, liquid: true, damage: 0 }
+            },
+            {
+                id: 'lava',
+                name: 'Lava',
+                color: '#DC143C',
+                properties: { walkable: false, solid: false, liquid: true, damage: 100 }
+            },
+            {
+                id: 'ice',
+                name: 'Ice',
+                color: '#87CEEB',
+                properties: { walkable: true, solid: true, slippery: true }
+            },
+            {
+                id: 'grass',
+                name: 'Grass',
+                color: '#228B22',
+                properties: { walkable: true, solid: true, decorative: true }
+            },
+            {
+                id: 'stone',
+                name: 'Stone',
+                color: '#708090',
+                properties: { walkable: true, solid: true, durable: true }
+            },
+            {
+                id: 'wood',
+                name: 'Wood',
+                color: '#DEB887',
+                properties: { walkable: true, solid: true, flammable: true }
+            },
+            {
+                id: 'metal',
+                name: 'Metal',
+                color: '#C0C0C0',
+                properties: { walkable: true, solid: true, conductive: true }
+            }
+        ];
+
+        defaultTiles.forEach(tile => {
+            this.tiles.set(tile.id, tile);
+        });
     }
-    
-    // Add selection to new tile
-    const newSelected = this.container.querySelector(`[data-tile-id="${tileId}"]`);
-    if (newSelected) {
-      newSelected.classList.add('selected');
+
+    public selectTile(tileId: string): void {
+        if (this.tiles.has(tileId)) {
+            this.selectedTile = tileId;
+        }
     }
-    
-    this.selectedTileId = tileId;
-    
-    // Call callback if provided
-    if (this.onTileSelected) {
-      this.onTileSelected(tileId);
+
+    public getSelectedTile(): string {
+        return this.selectedTile;
     }
-  }
 
-  public getSelectedTile(): number {
-    return this.selectedTileId;
-  }
-
-  public setTiles(tiles: HTMLImageElement[]): void {
-    this.tiles = tiles;
-    this.render();
-  }
-
-  public addTile(image: HTMLImageElement): void {
-    this.tiles.push(image);
-    this.render();
-  }
-
-  public removeTile(tileId: number): void {
-    if (tileId >= 0 && tileId < this.tiles.length) {
-      this.tiles.splice(tileId, 1);
-      this.render();
+    public getTileDefinition(tileId: string): TileDefinition | undefined {
+        return this.tiles.get(tileId);
     }
-  }
 
-  public getTileImage(tileId: number): HTMLImageElement | undefined {
-    return this.tiles[tileId];
-  }
-
-  public getAllTiles(): HTMLImageElement[] {
-    return [...this.tiles];
-  }
-
-  public setOnTileSelected(callback: (tileId: number) => void): void {
-    this.onTileSelected = callback;
-  }
-
-  public clearSelection(): void {
-    const selected = this.container.querySelector('.tile-item.selected');
-    if (selected) {
-      selected.classList.remove('selected');
+    public getAllTiles(): TileDefinition[] {
+        return Array.from(this.tiles.values());
     }
-    this.selectedTileId = -1;
-  }
 
-  public getTileCount(): number {
-    return this.tiles.length;
-  }
+    public addTile(tile: TileDefinition): void {
+        this.tiles.set(tile.id, tile);
+    }
 
-  public isEmpty(): boolean {
-    return this.tiles.length === 0;
-  }
+    public removeTile(tileId: string): boolean {
+        return this.tiles.delete(tileId);
+    }
 
-  public loadTilesetFromImage(image: HTMLImageElement, tileWidth: number, tileHeight: number): void {
-    // Create a canvas to extract tiles from the tileset image
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-    
-    canvas.width = tileWidth;
-    canvas.height = tileHeight;
-    
-    const tiles: HTMLImageElement[] = [];
-    const tilesPerRow = Math.floor(image.width / tileWidth);
-    const tilesPerCol = Math.floor(image.height / tileHeight);
-    
-    for (let row = 0; row < tilesPerCol; row++) {
-      for (let col = 0; col < tilesPerRow; col++) {
-        // Clear canvas
-        ctx.clearRect(0, 0, tileWidth, tileHeight);
-        
-        // Draw tile from tileset
-        ctx.drawImage(
-          image,
-          col * tileWidth, row * tileHeight, tileWidth, tileHeight,
-          0, 0, tileWidth, tileHeight
+    public getTileProperties(tileId: string): Record<string, any> | undefined {
+        const tile = this.tiles.get(tileId);
+        return tile?.properties;
+    }
+
+    public setTileProperties(tileId: string, properties: Record<string, any>): void {
+        const tile = this.tiles.get(tileId);
+        if (tile) {
+            tile.properties = { ...tile.properties, ...properties };
+        }
+    }
+
+    public getTileColor(tileId: string): string {
+        const tile = this.tiles.get(tileId);
+        return tile?.color || '#666';
+    }
+
+    public getTileName(tileId: string): string {
+        const tile = this.tiles.get(tileId);
+        return tile?.name || tileId;
+    }
+
+    public isTileWalkable(tileId: string): boolean {
+        const properties = this.getTileProperties(tileId);
+        return properties?.walkable ?? false;
+    }
+
+    public isTileSolid(tileId: string): boolean {
+        const properties = this.getTileProperties(tileId);
+        return properties?.solid ?? false;
+    }
+
+    public isTileLiquid(tileId: string): boolean {
+        const properties = this.getTileProperties(tileId);
+        return properties?.liquid ?? false;
+    }
+
+    public getTileDamage(tileId: string): number {
+        const properties = this.getTileProperties(tileId);
+        return properties?.damage ?? 0;
+    }
+
+    public exportTileDefinitions(): Record<string, TileDefinition> {
+        return Object.fromEntries(this.tiles);
+    }
+
+    public importTileDefinitions(definitions: Record<string, TileDefinition>): void {
+        this.tiles.clear();
+        Object.entries(definitions).forEach(([id, tile]) => {
+            this.tiles.set(id, tile);
+        });
+    }
+
+    public createCustomTile(id: string, name: string, color: string, properties: Record<string, any> = {}): TileDefinition {
+        const tile: TileDefinition = {
+            id,
+            name,
+            color,
+            properties: {
+                walkable: true,
+                solid: true,
+                ...properties
+            }
+        };
+
+        this.addTile(tile);
+        return tile;
+    }
+
+    public getTilesByCategory(): Record<string, TileDefinition[]> {
+        const categories: Record<string, TileDefinition[]> = {
+            basic: [],
+            hazards: [],
+            liquids: [],
+            decorative: []
+        };
+
+        this.getAllTiles().forEach(tile => {
+            if (tile.id === 'empty') {
+                categories.basic.push(tile);
+            } else if (tile.properties?.damage > 0) {
+                categories.hazards.push(tile);
+            } else if (tile.properties?.liquid) {
+                categories.liquids.push(tile);
+            } else if (tile.properties?.decorative) {
+                categories.decorative.push(tile);
+            } else {
+                categories.basic.push(tile);
+            }
+        });
+
+        return categories;
+    }
+
+    public searchTiles(query: string): TileDefinition[] {
+        const lowercaseQuery = query.toLowerCase();
+        return this.getAllTiles().filter(tile => 
+            tile.name.toLowerCase().includes(lowercaseQuery) ||
+            tile.id.toLowerCase().includes(lowercaseQuery)
         );
-        
-        // Create image from canvas
-        const tileImage = new Image();
-        tileImage.src = canvas.toDataURL();
-        tiles.push(tileImage);
-      }
     }
-    
-    this.setTiles(tiles);
-  }
 
-  public exportTileset(): { tiles: string[], tileWidth: number, tileHeight: number } {
-    const tileDataUrls = this.tiles.map(img => img.src);
-    const firstTile = this.tiles[0];
-    const tileWidth = firstTile ? firstTile.width : 32;
-    const tileHeight = firstTile ? firstTile.height : 32;
-    
-    return {
-      tiles: tileDataUrls,
-      tileWidth,
-      tileHeight
-    };
-  }
+    public getTileSuggestions(partialId: string): TileDefinition[] {
+        const lowercasePartial = partialId.toLowerCase();
+        return this.getAllTiles().filter(tile => 
+            tile.id.toLowerCase().startsWith(lowercasePartial)
+        );
+    }
 
-  public importTileset(tilesetData: { tiles: string[], tileWidth: number, tileHeight: number }): void {
-    const tiles = tilesetData.tiles.map(dataUrl => {
-      const img = new Image();
-      img.src = dataUrl;
-      return img;
-    });
-    
-    this.setTiles(tiles);
-  }
+    public validateTileId(tileId: string): boolean {
+        // Check if tile ID is valid (alphanumeric and underscores only)
+        return /^[a-zA-Z0-9_]+$/.test(tileId) && tileId.length > 0;
+    }
+
+    public getTileCount(): number {
+        return this.tiles.size;
+    }
+
+    public clear(): void {
+        this.tiles.clear();
+        this.initializeDefaultTiles();
+    }
 } 
