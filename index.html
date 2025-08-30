@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS - Retro Game Engine</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .retro-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="retro-info">
+        <h3>PrinceTS Multi-Platform Engine</h3>
+        <div id="platformInfo">
+            <h3>Loading...</h3>
+        </div>
+        <p>Display: <span id="displayRes">--</span></p>
+        <p>Scale: <span id="scale">--</span></p>
+        <p>Controls: WASD/Arrows, Space</p>
+        <p>Platform: P=Selector, Dev: F1=Debug, C=FreeCam, `=Menu</p>
+    </div>
+    <canvas id="gameCanvas" tabindex="0"></canvas>
+    <script type="module" src="dist/main.js"></script>
+    <script>
+        // Update retro scaling info
+        function updateRetroInfo() {
+            const canvas = document.getElementById('gameCanvas');
+            const displayRes = document.getElementById('displayRes');
+            const scale = document.getElementById('scale');
+            
+            if (canvas && canvas.width > 0) {
+                displayRes.textContent = `${canvas.width}x${canvas.height}`;
+                
+                // Get platform resolution from URL or default
+                const urlParams = new URLSearchParams(window.location.search);
+                const platformKey = urlParams.get('platform') || 'snes';
+                
+                // Default resolutions for common platforms
+                const platformResolutions = {
+                    'apple-ii': {width: 280, height: 192},
+                    'ibm-pc-cga': {width: 320, height: 200},
+                    'ibm-pc-ega': {width: 320, height: 200},
+                    'ibm-pc-vga': {width: 320, height: 200},
+                    'amiga': {width: 320, height: 200},
+                    'atari-st': {width: 320, height: 200},
+                    'macintosh': {width: 512, height: 342},
+                    'fm-towns': {width: 640, height: 480},
+                    'sharp-x68000': {width: 512, height: 512},
+                    'nes': {width: 256, height: 240},
+                    'snes': {width: 256, height: 224},
+                    'genesis': {width: 320, height: 224},
+                    'sega-cd': {width: 320, height: 224},
+                    'turbografx-cd': {width: 320, height: 224},
+                    'game-boy': {width: 160, height: 144},
+                    'game-boy-color': {width: 160, height: 144},
+                    'game-gear': {width: 160, height: 144},
+                    'windows-3x': {width: 320, height: 200}
+                };
+                
+                const platformRes = platformResolutions[platformKey] || {width: 320, height: 200};
+                
+                // Calculate scale
+                const scaleX = canvas.width / platformRes.width;
+                const scaleY = canvas.height / platformRes.height;
+                const actualScale = Math.min(scaleX, scaleY);
+                scale.textContent = `${actualScale.toFixed(2)}x`;
+            }
+        }
+        
+        // Update info after canvas initializes
+        setTimeout(updateRetroInfo, 100);
+        window.addEventListener('resize', updateRetroInfo);
+    </script>
+</body>
+</html> 

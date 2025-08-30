@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS Boot Config Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        .test-section h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .url-example {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #4CAF50;
+            word-break: break-all;
+        }
+        .url-example a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        .url-example a:hover {
+            text-decoration: underline;
+        }
+        .description {
+            color: #ccc;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .preset-section {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            margin-top: 20px;
+        }
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .preset-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #555;
+            text-align: center;
+        }
+        .preset-card h3 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+        .preset-card a {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .preset-card a:hover {
+            text-decoration: underline;
+        }
+        .game-container {
+            grid-column: 1 / -1;
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            text-align: center;
+        }
+        #gameCanvas {
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            max-width: 100%;
+            height: auto;
+        }
+        .info-box {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 PrinceTS Boot Configuration Test</h1>
+    
+    <div class="info-box">
+        <h3>📋 How to Use</h3>
+        <p>Click any of the example URLs below to test different boot configurations. The game will load with the specified parameters.</p>
+        <p>You can also manually edit the URL parameters to test custom configurations.</p>
+    </div>
+
+    <div class="container">
+        <div class="test-section">
+            <h2>🎯 Basic Game State</h2>
+            <div class="description">Test basic player positioning and game state parameters</div>
+            
+            <div class="url-example">
+                <strong>Player Position:</strong><br>
+                <a href="?playerX=100&playerY=200&health=75">?playerX=100&playerY=200&health=75</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Game State:</strong><br>
+                <a href="?level=2&score=5000&lives=3">?level=2&score=5000&lives=3</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Time & Difficulty:</strong><br>
+                <a href="?time=300&difficulty=hard">?time=300&difficulty=hard</a>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎨 Display & Platform</h2>
+            <div class="description">Test different display settings and platform configurations</div>
+            
+            <div class="url-example">
+                <strong>Resolution:</strong><br>
+                <a href="?resolution=800x600&fullscreen=true">?resolution=800x600&fullscreen=true</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Platform:</strong><br>
+                <a href="?platform=gameboy">?platform=gameboy</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Accessibility:</strong><br>
+                <a href="?highContrast=true&subtitles=true">?highContrast=true&subtitles=true</a>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 Audio & Input</h2>
+            <div class="description">Test audio settings and input method configurations</div>
+            
+            <div class="url-example">
+                <strong>Audio Settings:</strong><br>
+                <a href="?musicVolume=0.5&sfxVolume=0.8&mute=false">?musicVolume=0.5&sfxVolume=0.8&mute=false</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Input Method:</strong><br>
+                <a href="?inputMethod=gamepad">?inputMethod=gamepad</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Language:</strong><br>
+                <a href="?lang=es">?lang=es</a>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🐛 Debug & Development</h2>
+            <div class="description">Test debug features and development tools</div>
+            
+            <div class="url-example">
+                <strong>Debug Mode:</strong><br>
+                <a href="?debug=true">?debug=true</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Cheats:</strong><br>
+                <a href="?cheats=GodMode,NoClip,InfiniteTime">?cheats=GodMode,NoClip,InfiniteTime</a>
+            </div>
+            
+            <div class="url-example">
+                <strong>Skip Cutscene:</strong><br>
+                <a href="?skipCutscene=1">?skipCutscene=1</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="preset-section">
+        <h2>🎯 Preset Configurations</h2>
+        <div class="description">Quick preset configurations for different gameplay styles</div>
+        
+        <div class="preset-grid">
+            <div class="preset-card">
+                <h3>Easy Mode</h3>
+                <p>God mode enabled, high health</p>
+                <a href="?preset=easy">Load Easy Mode</a>
+            </div>
+            
+            <div class="preset-card">
+                <h3>Hard Mode</h3>
+                <p>Low health, debug enabled</p>
+                <a href="?preset=hard">Load Hard Mode</a>
+            </div>
+            
+            <div class="preset-card">
+                <h3>Speedrun</h3>
+                <p>No clip, skip cutscenes</p>
+                <a href="?preset=speedrun">Load Speedrun</a>
+            </div>
+            
+            <div class="preset-card">
+                <h3>Debug Mode</h3>
+                <p>All cheats, high contrast</p>
+                <a href="?preset=debug">Load Debug</a>
+            </div>
+            
+            <div class="preset-card">
+                <h3>Accessibility</h3>
+                <p>High contrast, subtitles, low volume</p>
+                <a href="?preset=accessibility">Load Accessibility</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <h2>🎮 Game Canvas</h2>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <p>Current URL: <span id="currentUrl"></span></p>
+        <button onclick="copyCurrentUrl()" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px;">Copy Current URL</button>
+        <button onclick="clearUrl()" style="background: #f44336; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 10px;">Clear URL Parameters</button>
+    </div>
+
+    <script>
+        // Update current URL display
+        function updateCurrentUrl() {
+            document.getElementById('currentUrl').textContent = window.location.href;
+        }
+        
+        // Copy current URL to clipboard
+        async function copyCurrentUrl() {
+            try {
+                await navigator.clipboard.writeText(window.location.href);
+                alert('URL copied to clipboard!');
+            } catch (error) {
+                console.error('Failed to copy URL:', error);
+                alert('Failed to copy URL. Please copy manually.');
+            }
+        }
+        
+        // Clear URL parameters
+        function clearUrl() {
+            window.history.replaceState({}, '', window.location.pathname);
+            updateCurrentUrl();
+            location.reload();
+        }
+        
+        // Update URL display on page load
+        updateCurrentUrl();
+        
+        // Update URL display when URL changes
+        window.addEventListener('popstate', updateCurrentUrl);
+    </script>
+
+    <!-- Load the main game script -->
+    <script type="module" src="dist/main.js"></script>
+</body>
+</html> 

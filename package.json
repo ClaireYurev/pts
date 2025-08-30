@@ -1,0 +1,19 @@
+{
+  "name": "prince-ts-game",
+  "version": "1.0.0",
+  "description": "A TypeScript game engine for Prince of Persia style games",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "serve": "npx http-server . -p 8080 -c-1",
+    "start": "npm run build && npm run serve"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "http-server": "^14.1.1"
+  },
+  "keywords": ["game", "typescript", "canvas", "prince-of-persia"],
+  "author": "",
+  "license": "MIT"
+} 

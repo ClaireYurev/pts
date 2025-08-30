@@ -1,0 +1,28 @@
+{
+  "name": "PrinceTS Game Library",
+  "version": "1.0.0",
+  "description": "Available game packs for PrinceTS",
+  "packs": [
+    {
+      "name": "Example Pack",
+      "file": "packs/example.ptspack.json",
+      "description": "Basic example game pack with simple platforming",
+      "version": "1.0.0",
+      "author": "PrinceTS Team"
+    },
+    {
+      "name": "Adventure Pack",
+      "file": "packs/adventure.ptspack.json",
+      "description": "Epic adventure with multiple levels and challenges",
+      "version": "1.0.0",
+      "author": "PrinceTS Team"
+    },
+    {
+      "name": "Dungeon Pack",
+      "file": "packs/dungeon.ptspack.json",
+      "description": "Dark dungeon exploration with puzzles and enemies",
+      "version": "1.0.0",
+      "author": "PrinceTS Team"
+    }
+  ]
+} 

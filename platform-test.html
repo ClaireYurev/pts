@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS Multi-Platform Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+
+        .header {
+            background: #1a1a1a;
+            padding: 10px;
+            border-bottom: 2px solid #333;
+            text-align: center;
+        }
+
+        .platform-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        .platform-btn {
+            background: #333;
+            color: #fff;
+            border: 1px solid #666;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .platform-btn:hover {
+            background: #555;
+        }
+
+        .platform-btn.active {
+            background: #007bff;
+            border-color: #0056b3;
+        }
+
+        .game-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            background-color: #000;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #ffd700;
+        }
+
+        .info-panel p {
+            margin: 5px 0;
+            color: #ccc;
+        }
+
+        .instructions {
+            background: #1a1a1a;
+            padding: 10px;
+            border-top: 2px solid #333;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 PrinceTS Multi-Platform Test</h1>
+        <p>Experience Prince of Persia across all original platforms</p>
+        
+        <div class="platform-buttons">
+            <button class="platform-btn active" data-platform="ibm-pc-vga">IBM PC VGA</button>
+            <button class="platform-btn" data-platform="nes">NES</button>
+            <button class="platform-btn" data-platform="snes">SNES</button>
+            <button class="platform-btn" data-platform="genesis">Genesis</button>
+            <button class="platform-btn" data-platform="game-boy">Game Boy</button>
+            <button class="platform-btn" data-platform="game-boy-color">GBC</button>
+            <button class="platform-btn" data-platform="macintosh">Macintosh</button>
+            <button class="platform-btn" data-platform="fm-towns">FM Towns</button>
+            <button class="platform-btn" data-platform="apple-ii">Apple II</button>
+            <button class="platform-btn" data-platform="ibm-pc-cga">CGA</button>
+            <button class="platform-btn" data-platform="ibm-pc-ega">EGA</button>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <div class="info-panel">
+            <h3>Platform Info</h3>
+            <div id="platformInfo">
+                <p>Loading...</p>
+            </div>
+        </div>
+        <canvas id="gameCanvas" tabindex="0"></canvas>
+    </div>
+
+    <div class="instructions">
+        <p><strong>Controls:</strong> WASD/Arrows to move, Space to jump | <strong>Platform:</strong> Click buttons above or press P for full selector</p>
+        <p><strong>Dev:</strong> F1=Debug, C=FreeCam, `=Menu | <strong>Resolution:</strong> Each platform uses its original resolution</p>
+    </div>
+
+    <script type="module" src="dist/main.js"></script>
+    <script>
+        // Platform switching functionality
+        let currentEngine = null;
+        let currentPlatform = 'snes';
+
+        // Platform button event listeners
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const platform = e.target.dataset.platform;
+                if (platform && platform !== currentPlatform) {
+                    switchPlatform(platform);
+                }
+            });
+        });
+
+        function switchPlatform(platformKey) {
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('platform', platformKey);
+            window.history.replaceState({}, '', url);
+
+            // Update active button
+            document.querySelectorAll('.platform-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.platform === platformKey);
+            });
+
+            // Reload page to switch platform
+            window.location.reload();
+        }
+
+        // Update platform info
+        function updatePlatformInfo() {
+            const platformInfo = document.getElementById('platformInfo');
+            const urlParams = new URLSearchParams(window.location.search);
+            const platformKey = urlParams.get('platform') || 'ibm-pc-vga';
+            
+            const platformData = {
+                'apple-ii': { name: 'Apple II', res: '280×192', colors: 16, year: 1989 },
+                'ibm-pc-cga': { name: 'IBM PC (CGA)', res: '320×200', colors: 4, year: 1990 },
+                'ibm-pc-ega': { name: 'IBM PC (EGA)', res: '320×200', colors: 16, year: 1990 },
+                'ibm-pc-vga': { name: 'IBM PC (VGA)', res: '320×200', colors: 256, year: 1990 },
+                'amiga': { name: 'Amiga', res: '320×200', colors: 32, year: 1990 },
+                'atari-st': { name: 'Atari ST', res: '320×200', colors: 16, year: 1990 },
+                'macintosh': { name: 'Macintosh', res: '512×342', colors: 256, year: 1990 },
+                'fm-towns': { name: 'FM Towns', res: '640×480', colors: 256, year: 1990 },
+                'sharp-x68000': { name: 'Sharp X68000', res: '512×512', colors: 256, year: 1990 },
+                'nes': { name: 'NES/Famicom', res: '256×240', colors: 52, year: 1992 },
+                'snes': { name: 'Super Nintendo', res: '256×224', colors: 256, year: 1992 },
+                'genesis': { name: 'Sega Genesis', res: '320×224', colors: 64, year: 1993 },
+                'sega-cd': { name: 'Sega CD', res: '320×224', colors: 64, year: 1992 },
+                'turbografx-cd': { name: 'TurboGrafx-CD', res: '320×224', colors: 256, year: 1991 },
+                'game-boy': { name: 'Game Boy', res: '160×144', colors: 4, year: 1992 },
+                'game-boy-color': { name: 'Game Boy Color', res: '160×144', colors: 56, year: 1999 },
+                'game-gear': { name: 'Sega Game Gear', res: '160×144', colors: 32, year: 1992 },
+                'windows-3x': { name: 'Windows 3.x/95', res: '320×200', colors: 256, year: 1992 }
+            };
+
+            const platform = platformData[platformKey] || platformData['ibm-pc-vga'];
+            
+            if (platformInfo) {
+                platformInfo.innerHTML = `
+                    <p><strong>${platform.name}</strong></p>
+                    <p>Resolution: ${platform.res}</p>
+                    <p>Colors: ${platform.colors}</p>
+                    <p>Year: ${platform.year}</p>
+                `;
+            }
+        }
+
+        // Initialize
+        updatePlatformInfo();
+        currentPlatform = new URLSearchParams(window.location.search).get('platform') || 'snes';
+        
+        // Update active button on load
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.platform === currentPlatform);
+        });
+    </script>
+</body>
+</html> 
