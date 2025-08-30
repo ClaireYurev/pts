@@ -9,6 +9,10 @@ import { Entity } from "./Entity.js";
 import { GamePackLoader } from "./GamePackLoader.js";
 import { GamePack } from "./GamePack.js";
 import { PauseManager } from "./PauseManager.js";
+import { AudioManager } from "./AudioManager.js";
+import { SettingsStore } from "./SettingsStore.js";
+import { SaveManager } from "./SaveManager.js";
+import { PiMenu } from "../ui/PiMenu.js";
 import { CheatManager, CheatFlag } from "../dev/CheatManager.js";
 import { FreeCamera } from "../dev/FreeCamera.js";
 import { DebugOverlay } from "../dev/DebugOverlay.js";
@@ -28,6 +32,14 @@ export class GameEngine {
     private fpsDisplay: boolean = false;
     public pauseManager: PauseManager;
     
+    // Audio and settings
+    public audioManager: AudioManager;
+    public settingsStore: SettingsStore;
+    public saveManager: SaveManager;
+    
+    // UI
+    public piMenu: PiMenu;
+    
     // Dev tools and cheats
     public cheatManager: CheatManager;
     private freeCamera: FreeCamera;
@@ -35,6 +47,11 @@ export class GameEngine {
     
     // State management
     private platformSwitchInProgress = false;
+
+    // Platform switching state management
+    private platformSwitchLock = false;
+    private platformSwitchPromise: Promise<void> | null = null;
+    private currentPlatformKey: string = 'snes';
 
     constructor(public canvas: HTMLCanvasElement, platformKey?: string) {
         this.renderer = new Renderer(canvas, platformKey);
@@ -48,6 +65,14 @@ export class GameEngine {
         this.stateMachine = new StateMachine();
         this.packLoader = new GamePackLoader();
         this.pauseManager = new PauseManager();
+        
+        // Initialize audio and settings
+        this.audioManager = new AudioManager();
+        this.settingsStore = SettingsStore.getInstance();
+        this.saveManager = new SaveManager();
+        
+        // Initialize UI
+        this.piMenu = new PiMenu(this.pauseManager, this.saveManager, this.settingsStore);
         
         // Initialize dev tools and cheats
         this.cheatManager = new CheatManager();
@@ -65,6 +90,9 @@ export class GameEngine {
         // Apply optimal performance settings for current browser
         this.loop.applyOptimalSettings();
 
+        // Apply settings to renderer and audio
+        this.applySettings();
+
         // Add some test entities for demonstration
         this.createTestEntities();
         
@@ -73,6 +101,9 @@ export class GameEngine {
         
         // Initialize performance monitoring
         this.initializePerformanceMonitoring();
+        
+        // Setup user interaction handling for audio
+        this.setupUserInteractionHandling();
     }
 
     private initializePerformanceMonitoring(): void {
@@ -207,6 +238,9 @@ export class GameEngine {
             
             // Check collisions (with NoClip cheat integration)
             this.checkCollisionsWithCheats();
+            
+            // Handle trigger catch-up for fast-moving entities
+            this.handleTriggerCatchUp();
             
             // Handle player input for test
             this.handlePlayerInput();
@@ -427,6 +461,74 @@ export class GameEngine {
         }
     }
 
+    private handleTriggerCatchUp(): void {
+        // Handle trigger catch-up for fast-moving entities
+        // This prevents entities from moving so fast they skip over triggers
+        for (const entity of this.entities) {
+            if (entity.velocity && (Math.abs(entity.velocity.x) > 100 || Math.abs(entity.velocity.y) > 100)) {
+                // Entity is moving fast, check for triggers along the path
+                this.checkTriggerPath(entity);
+            }
+        }
+    }
+
+    private checkTriggerPath(entity: Entity): void {
+        // Get entity's old and new positions
+        const oldPos = entity.previousPosition || entity.position;
+        const newPos = entity.position;
+        
+        // Calculate movement vector
+        const deltaX = newPos.x - oldPos.x;
+        const deltaY = newPos.y - oldPos.y;
+        
+        // If movement is significant, check for triggers along the path
+        if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+            // Sample points along the movement path
+            const steps = Math.max(Math.ceil(Math.abs(deltaX) / 10), Math.ceil(Math.abs(deltaY) / 10));
+            
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const checkX = oldPos.x + deltaX * t;
+                const checkY = oldPos.y + deltaY * t;
+                
+                // Check for triggers at this position
+                this.checkTriggersAtPosition(entity, checkX, checkY);
+            }
+        }
+    }
+
+    private checkTriggersAtPosition(entity: Entity, x: number, y: number): void {
+        // This would check for triggers at the given position
+        // and fire them if the entity should trigger them
+        // Implementation depends on your trigger system
+        
+        // Example implementation:
+        const triggers = this.getTriggersAtPosition(x, y);
+        triggers.forEach(trigger => {
+            if (this.shouldTrigger(entity, trigger)) {
+                this.fireTrigger(trigger, entity);
+            }
+        });
+    }
+
+    private getTriggersAtPosition(x: number, y: number): any[] {
+        // This would return all triggers at the given position
+        // Implementation depends on your trigger system
+        return [];
+    }
+
+    private shouldTrigger(entity: Entity, trigger: any): boolean {
+        // Check if the entity should trigger this trigger
+        // Implementation depends on your trigger system
+        return true;
+    }
+
+    private fireTrigger(trigger: any, entity: Entity): void {
+        // Fire the trigger for the entity
+        // Implementation depends on your trigger system
+        console.log(`Trigger fired: ${trigger.id} by entity ${entity.id}`);
+    }
+
     /**
      * Check if player is near a ledge for sticky grab
      */
@@ -552,14 +654,13 @@ export class GameEngine {
                 // Update debug info
                 this.debugOverlay.update({
                     fps: this.loop.getFPS(),
+                    frameTime: 16.67, // Default 60fps frame time
+                    entities: this.entities.length,
                     playerPosition: player.position,
-                    playerState: 'idle', // Entity doesn't have state property
-                    entities: this.entities.map(e => ({
-                        id: 'entity', // Entity doesn't have id property
-                        position: e.position,
-                        bounds: e.getCollider()
-                    }))
-                }, 0); // deltaTime not available here
+                    playerVelocity: player.velocity,
+                    playerHealth: player.health,
+                    gameTime: Date.now()
+                });
                 
                 // Render the debug overlay
                 this.debugOverlay.render();
@@ -701,55 +802,111 @@ export class GameEngine {
     }
 
     // Platform management
-    public setPlatform(platformKey: string): boolean {
-        // Prevent race conditions during platform switching
-        if (this.platformSwitchInProgress) {
-            console.warn("Platform switch already in progress, ignoring request");
-            return false;
+    /**
+     * Set platform with proper state synchronization
+     */
+    public async setPlatform(platformKey: string): Promise<void> {
+        // Check if platform switch is already in progress
+        if (this.platformSwitchLock) {
+            console.warn("Platform switch already in progress, waiting for completion");
+            if (this.platformSwitchPromise) {
+                await this.platformSwitchPromise;
+            }
+            return;
         }
-
-        const platform = PlatformManager.getPlatform(platformKey);
-        if (!platform) {
-            console.error(`Invalid platform key: ${platformKey}`);
-            return false;
+        
+        // Validate platform key
+        if (!platformKey || typeof platformKey !== 'string') {
+            throw new Error("Invalid platform key provided");
         }
-
+        
+        // Check if platform is already set
+        if (this.currentPlatformKey === platformKey) {
+            console.log(`Platform already set to ${platformKey}`);
+            return;
+        }
+        
+        // Acquire platform switch lock
+        this.platformSwitchLock = true;
+        
         try {
-            this.platformSwitchInProgress = true;
-            
-            // Pause the game loop during platform switch
+            // Create platform switch promise
+            this.platformSwitchPromise = this.performPlatformSwitch(platformKey);
+            await this.platformSwitchPromise;
+        } finally {
+            // Release platform switch lock
+            this.platformSwitchLock = false;
+            this.platformSwitchPromise = null;
+        }
+    }
+
+    /**
+     * Perform the actual platform switch with proper state management
+     */
+    private async performPlatformSwitch(platformKey: string): Promise<void> {
+        console.log(`Switching platform from ${this.currentPlatformKey} to ${platformKey}`);
+        
+        try {
+            // Pause the game during platform switch
             const wasPaused = this.pauseManager.isPaused;
             this.pauseManager.pause();
             
-            // Update renderer with new platform
-            const success = this.renderer.setPlatform(platformKey);
+            // Stop the game loop temporarily
+            this.loop.stop();
             
-            if (success) {
-                // Update physics floor to match new platform
-                const platformConfig = this.renderer.getCurrentPlatform();
-                this.physics.setFloorY(platformConfig.resolution.height);
-                
-                // Recreate test entities for new platform
-                this.recreateEntitiesForPlatform();
-                
-                console.log(`Successfully switched to platform: ${platform.name}`);
-            } else {
-                console.error(`Failed to switch to platform: ${platform.name}`);
-            }
+            // Clear current entities
+            this.entities.length = 0;
             
-            // Resume game if it wasn't paused before
+            // Update renderer platform
+            await this.renderer.setPlatform(platformKey);
+            
+            // Update current platform key
+            this.currentPlatformKey = platformKey;
+            
+            // Recreate entities for new platform
+            this.createTestEntities();
+            
+            // Restart game loop
+            this.loop.start();
+            
+            // Restore pause state
             if (!wasPaused) {
                 this.pauseManager.resume();
             }
             
-            return success;
+            console.log(`Platform switch completed successfully: ${platformKey}`);
         } catch (error) {
-            console.error("Error during platform switch:", error);
-            this.pauseManager.resume(); // Ensure game is resumed on error
-            return false;
-        } finally {
-            this.platformSwitchInProgress = false;
+            console.error(`Platform switch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            
+            // Attempt to recover by reverting to previous platform
+            try {
+                await this.renderer.setPlatform(this.currentPlatformKey);
+                this.loop.start();
+                if (!this.pauseManager.isPaused) {
+                    this.pauseManager.resume();
+                }
+                console.log("Recovered to previous platform state");
+            } catch (recoveryError) {
+                console.error("Failed to recover from platform switch error:", recoveryError);
+                throw new Error("Platform switch failed and recovery failed");
+            }
+            
+            throw error;
         }
+    }
+
+    /**
+     * Get current platform key
+     */
+    public getCurrentPlatformKey(): string {
+        return this.currentPlatformKey;
+    }
+
+    /**
+     * Check if platform switch is in progress
+     */
+    public isPlatformSwitchInProgress(): boolean {
+        return this.platformSwitchLock;
     }
 
     private recreateEntitiesForPlatform(): void {
@@ -775,5 +932,89 @@ export class GameEngine {
 
     public getAllPlatforms(): PlatformConfig[] {
         return PlatformManager.getAllPlatforms();
+    }
+
+    // Settings and audio management
+    private applySettings(): void {
+        const videoSettings = this.settingsStore.getVideoSettings();
+        const audioSettings = this.settingsStore.getAudioSettings();
+
+        // Apply video settings to renderer
+        this.renderer.setScaleMode(videoSettings.scaleMode);
+        this.renderer.setSafeArea(videoSettings.safeAreaPct);
+        if (videoSettings.fpsCap) {
+            this.loop.setFixedTimestepRate(1 / videoSettings.fpsCap);
+        }
+        // Note: vsync is handled by the browser, no direct control needed
+
+        // Apply audio settings
+        this.audioManager.setMasterVolume(audioSettings.master);
+        this.audioManager.setMusicVolume(audioSettings.music);
+        this.audioManager.setSfxVolume(audioSettings.sfx);
+        this.audioManager.setMuted(audioSettings.muted);
+        this.audioManager.setLatencyMode(audioSettings.latency);
+
+        // Setup settings change listeners
+        this.setupSettingsListeners();
+    }
+
+    private setupSettingsListeners(): void {
+        // Video settings listeners
+        this.settingsStore.addListener('video.scaleMode', (mode) => {
+            this.renderer.setScaleMode(mode);
+        });
+        this.settingsStore.addListener('video.safeAreaPct', (pct) => {
+            this.renderer.setSafeArea(pct);
+        });
+        this.settingsStore.addListener('video.fpsCap', (fps) => {
+            if (fps) {
+                this.loop.setFixedTimestepRate(1 / fps);
+            }
+        });
+        // Note: vsync is handled by the browser, no direct control needed
+
+        // Audio settings listeners
+        this.settingsStore.addListener('audio.master', (volume) => {
+            this.audioManager.setMasterVolume(volume);
+        });
+        this.settingsStore.addListener('audio.music', (volume) => {
+            this.audioManager.setMusicVolume(volume);
+        });
+        this.settingsStore.addListener('audio.sfx', (volume) => {
+            this.audioManager.setSfxVolume(volume);
+        });
+        this.settingsStore.addListener('audio.muted', (muted) => {
+            this.audioManager.setMuted(muted);
+        });
+        this.settingsStore.addListener('audio.latency', (latency) => {
+            this.audioManager.setLatencyMode(latency);
+        });
+    }
+
+    private setupUserInteractionHandling(): void {
+        const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'click'];
+        
+        const handleUserInteraction = () => {
+            this.audioManager.onUserInteraction();
+            
+            // Remove event listeners after first interaction
+            interactionEvents.forEach(event => {
+                document.removeEventListener(event, handleUserInteraction);
+            });
+        };
+        
+        // Add event listeners for user interaction
+        interactionEvents.forEach(event => {
+            document.addEventListener(event, handleUserInteraction, { once: true });
+        });
+    }
+
+    // Public getters for audio and settings
+    public getAudioManager(): AudioManager {
+        return this.audioManager;
+    }
+
+    public getSettingsStore(): SettingsStore {
+        return this.settingsStore;
     }
 } 

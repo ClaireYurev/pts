@@ -34,6 +34,60 @@ export class InputMap {
   private actionHeld: boolean = false;
   private ledgeGrabActive: boolean = false;
 
+  // Preset configurations
+  private static readonly PRESETS: Record<string, Partial<InputProfile>> = {
+    classic: {
+      keyboard: {
+        Left: 'ArrowLeft',
+        Right: 'ArrowRight',
+        Up: 'ArrowUp',
+        Down: 'ArrowDown',
+        Jump: 'Space',
+        Action: 'KeyZ',
+        Block: 'KeyX',
+        Pause: 'Escape'
+      },
+      gamepad: {
+        Left: 'DPadLeft',
+        Right: 'DPadRight',
+        Up: 'DPadUp',
+        Down: 'DPadDown',
+        Jump: 'ButtonA',
+        Action: 'ButtonB',
+        Block: 'ButtonX',
+        Pause: 'ButtonStart'
+      },
+      deadzonePct: 20,
+      lateJumpMs: 60,
+      stickyGrab: false
+    },
+    wasd: {
+      keyboard: {
+        Left: 'KeyA',
+        Right: 'KeyD',
+        Up: 'KeyW',
+        Down: 'KeyS',
+        Jump: 'Space',
+        Action: 'KeyE',
+        Block: 'KeyQ',
+        Pause: 'Escape'
+      },
+      gamepad: {
+        Left: 'DPadLeft',
+        Right: 'DPadRight',
+        Up: 'DPadUp',
+        Down: 'DPadDown',
+        Jump: 'ButtonA',
+        Action: 'ButtonB',
+        Block: 'ButtonX',
+        Pause: 'ButtonStart'
+      },
+      deadzonePct: 15,
+      lateJumpMs: 80,
+      stickyGrab: true
+    }
+  };
+
   constructor(initialProfile?: Partial<InputProfile>) {
     this.profile = {
       keyboard: {
@@ -63,6 +117,35 @@ export class InputMap {
     };
 
     this.setupEventListeners();
+  }
+
+  /**
+   * Load a preset configuration
+   */
+  loadPreset(presetName: string): boolean {
+    const preset = InputMap.PRESETS[presetName];
+    if (!preset) {
+      console.warn(`Preset "${presetName}" not found`);
+      return false;
+    }
+
+    this.profile = { ...this.profile, ...preset };
+    console.log(`Loaded preset: ${presetName}`);
+    return true;
+  }
+
+  /**
+   * Get available preset names
+   */
+  getAvailablePresets(): string[] {
+    return Object.keys(InputMap.PRESETS);
+  }
+
+  /**
+   * Get preset configuration
+   */
+  getPreset(presetName: string): Partial<InputProfile> | null {
+    return InputMap.PRESETS[presetName] || null;
   }
 
   /**

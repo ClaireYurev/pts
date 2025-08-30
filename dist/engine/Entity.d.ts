@@ -15,6 +15,8 @@ export declare class Entity {
     height: number;
     health: number;
     inventory: string[];
+    id: string;
+    previousPosition: Vector2;
     constructor(x?: number, y?: number);
     getCollider(): Collider;
     update(dt: number): void;

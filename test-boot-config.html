@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BootConfig Simple Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .url-display {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>BootConfig System Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Basic URL Parsing</h2>
+        <p>Testing URL: <code>?level=3&health=200&god=1&speed=2.0</code></p>
+        <button onclick="testBasicParsing()">Test Basic Parsing</button>
+        <div id="test1-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Parameter Validation</h2>
+        <p>Testing invalid parameters: <code>?level=9999&health=-50&speed=20.0</code></p>
+        <button onclick="testValidation()">Test Validation</button>
+        <div id="test2-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Boot Link Generation</h2>
+        <p>Generate a boot link with current settings</p>
+        <button onclick="testBootLink()">Generate Boot Link</button>
+        <div id="test3-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 4: Current URL Analysis</h2>
+        <p>Analyze the current page URL for boot parameters</p>
+        <button onclick="testCurrentUrl()">Analyze Current URL</button>
+        <div id="test4-result"></div>
+    </div>
+
+    <script type="module">
+        // Mock the BootConfig functions for testing
+        const mockBootConfig = {
+            parseBootConfig: () => {
+                const params = new URLSearchParams(window.location.search);
+                const config = {};
+                const warnings = [];
+                
+                // Basic parsing logic
+                if (params.has("level")) {
+                    const level = parseInt(params.get("level"));
+                    if (level >= 1 && level <= 999) {
+                        config.level = level;
+                    } else {
+                        warnings.push("Invalid level parameter");
+                    }
+                }
+                
+                if (params.has("health")) {
+                    const health = parseInt(params.get("health"));
+                    if (health >= 0 && health <= 9999) {
+                        config.health = health;
+                    } else {
+                        warnings.push("Invalid health parameter");
+                    }
+                }
+                
+                if (params.has("god")) {
+                    config.god = params.get("god") === "1";
+                }
+                
+                if (params.has("speed")) {
+                    const speed = parseFloat(params.get("speed"));
+                    if (speed >= 0.1 && speed <= 10.0) {
+                        config.speed = speed;
+                    } else {
+                        warnings.push("Invalid speed parameter");
+                    }
+                }
+                
+                return { config, warnings };
+            },
+            
+            validateBootConfig: (config) => {
+                const warnings = [];
+                
+                if (config.level !== undefined && (config.level < 1 || config.level > 999)) {
+                    warnings.push("Level must be between 1 and 999");
+                }
+                
+                if (config.health !== undefined && (config.health < 0 || config.health > 9999)) {
+                    warnings.push("Health must be between 0 and 9999");
+                }
+                
+                if (config.speed !== undefined && (config.speed < 0.1 || config.speed > 10.0)) {
+                    warnings.push("Speed must be between 0.1 and 10.0");
+                }
+                
+                return warnings;
+            },
+            
+            generateBootLink: (config) => {
+                const params = new URLSearchParams();
+                
+                Object.entries(config).forEach(([key, value]) => {
+                    if (value !== undefined && value !== false) {
+                        if (typeof value === 'boolean') {
+                            if (value) params.set(key, '1');
+                        } else {
+                            params.set(key, value.toString());
+                        }
+                    }
+                });
+                
+                const queryString = params.toString();
+                return queryString ? 
+                    `${window.location.origin}${window.location.pathname}?${queryString}` : 
+                    `${window.location.origin}${window.location.pathname}`;
+            }
+        };
+        
+        // Test functions
+        window.testBasicParsing = function() {
+            const resultDiv = document.getElementById('test1-result');
+            
+            try {
+                // Simulate URL with parameters
+                const originalSearch = window.location.search;
+                Object.defineProperty(window.location, 'search', {
+                    value: '?level=3&health=200&god=1&speed=2.0',
+                    writable: true
+                });
+                
+                const { config, warnings } = mockBootConfig.parseBootConfig();
+                
+                let html = '<h3>Parsed Configuration:</h3>';
+                html += '<pre>' + JSON.stringify(config, null, 2) + '</pre>';
+                
+                if (warnings.length > 0) {
+                    html += '<h3 class="warning">Warnings:</h3>';
+                    html += '<ul>';
+                    warnings.forEach(warning => {
+                        html += `<li class="warning">${warning}</li>`;
+                    });
+                    html += '</ul>';
+                } else {
+                    html += '<p class="success">✅ No warnings - all parameters valid!</p>';
+                }
+                
+                resultDiv.innerHTML = html;
+                
+                // Restore original search
+                Object.defineProperty(window.location, 'search', {
+                    value: originalSearch,
+                    writable: true
+                });
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        window.testValidation = function() {
+            const resultDiv = document.getElementById('test2-result');
+            
+            try {
+                const testConfig = {
+                    level: 9999,
+                    health: -50,
+                    speed: 20.0
+                };
+                
+                const warnings = mockBootConfig.validateBootConfig(testConfig);
+                
+                let html = '<h3>Test Configuration:</h3>';
+                html += '<pre>' + JSON.stringify(testConfig, null, 2) + '</pre>';
+                
+                if (warnings.length > 0) {
+                    html += '<h3 class="warning">Validation Warnings:</h3>';
+                    html += '<ul>';
+                    warnings.forEach(warning => {
+                        html += `<li class="warning">${warning}</li>`;
+                    });
+                    html += '</ul>';
+                    html += '<p class="success">✅ Validation working correctly!</p>';
+                } else {
+                    html += '<p class="error">❌ No warnings generated - validation may not be working</p>';
+                }
+                
+                resultDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        window.testBootLink = function() {
+            const resultDiv = document.getElementById('test3-result');
+            
+            try {
+                const testConfig = {
+                    level: 5,
+                    health: 150,
+                    god: true,
+                    speed: 1.5,
+                    noclip: true
+                };
+                
+                const bootLink = mockBootConfig.generateBootLink(testConfig);
+                
+                let html = '<h3>Generated Boot Link:</h3>';
+                html += '<div class="url-display">' + bootLink + '</div>';
+                html += '<p class="success">✅ Boot link generated successfully!</p>';
+                
+                resultDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        window.testCurrentUrl = function() {
+            const resultDiv = document.getElementById('test4-result');
+            
+            try {
+                const { config, warnings } = mockBootConfig.parseBootConfig();
+                
+                let html = '<h3>Current URL Analysis:</h3>';
+                html += '<p><strong>Current URL:</strong> ' + window.location.href + '</p>';
+                
+                if (Object.keys(config).length > 0) {
+                    html += '<h3>Detected Parameters:</h3>';
+                    html += '<pre>' + JSON.stringify(config, null, 2) + '</pre>';
+                } else {
+                    html += '<p>No boot parameters detected in current URL.</p>';
+                }
+                
+                if (warnings.length > 0) {
+                    html += '<h3 class="warning">Warnings:</h3>';
+                    html += '<ul>';
+                    warnings.forEach(warning => {
+                        html += `<li class="warning">${warning}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                resultDiv.innerHTML = html;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        // Auto-run current URL analysis on page load
+        window.addEventListener('load', () => {
+            if (window.location.search) {
+                window.testCurrentUrl();
+            }
+        });
+    </script>
+</body>
+</html> 

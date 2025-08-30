@@ -1,3 +1,5 @@
+import { SettingsStore } from '../SettingsStore.js';
+
 export type BootConfig = {
   // Game Pack & Level
   pack?: string; 
@@ -15,7 +17,7 @@ export type BootConfig = {
   // Game Settings
   time?: number; 
   seed?: number; 
-  difficulty?: 'normal'|'hard'|'custom';
+  difficulty?: 'easy'|'normal'|'hard'|'extreme';
   
   // Cheats
   noclip?: boolean; 
@@ -58,31 +60,120 @@ export type BootConfig = {
   editor?: boolean;
 };
 
+// Engine defaults (lowest precedence)
+const ENGINE_DEFAULTS: Partial<BootConfig> = {
+  level: 1,
+  cutscenes: false,
+  mute: true, // Start muted until input
+  health: 100,
+  maxhealth: 100,
+  difficulty: 'normal',
+  scale: 'integer',
+  fullscreen: false,
+  vol: 1.0,
+  music: true,
+  sfx: true,
+  latency: 'auto',
+  deadzone: 0.1,
+  jumpbuf: 100,
+  sticky: false,
+  hud: true,
+  lang: 'en',
+  fps: 60,
+  vsync: true,
+  speed: 1.0,
+  zoom: 1.0
+};
+
+// Pack defaults (loaded from pack manifest)
+export interface PackDefaults {
+  level?: number;
+  health?: number;
+  maxhealth?: number;
+  difficulty?: string;
+  cutscenes?: boolean;
+  [key: string]: any;
+}
+
 export function parseBootConfig(): {config: BootConfig; warnings: string[]} {
   const params = new URLSearchParams(window.location.search);
   const config: BootConfig = {};
   const warnings: string[] = [];
   
+  // Security check: Validate URL parameters
+  const securityManager = (window as any).ptsCore?.securityManager;
+  if (securityManager) {
+    const urlValidation = securityManager.validateUrl(window.location.href);
+    if (!urlValidation.valid) {
+      warnings.push(`URL validation failed: ${urlValidation.error}`);
+    }
+  }
+  
   // Helper functions
   const safeParseInt = (value: string | null, min: number = -Infinity, max: number = Infinity): number | undefined => {
     if (!value) return undefined;
-    const parsed = parseInt(value);
+    
+    // Security check: Validate input length
+    if (securityManager) {
+      const inputValidation = securityManager.validateInput(value, 50);
+      if (!inputValidation.valid) {
+        warnings.push(`Input validation failed: ${inputValidation.error}`);
+        return undefined;
+      }
+      value = inputValidation.sanitized || value;
+    }
+    
+    const parsed = parseInt(value as string);
     return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
   };
   
   const safeParseFloat = (value: string | null, min: number = -Infinity, max: number = Infinity): number | undefined => {
     if (!value) return undefined;
-    const parsed = parseFloat(value);
+    
+    // Security check: Validate input length
+    if (securityManager) {
+      const inputValidation = securityManager.validateInput(value, 50);
+      if (!inputValidation.valid) {
+        warnings.push(`Input validation failed: ${inputValidation.error}`);
+        return undefined;
+      }
+      value = inputValidation.sanitized || value;
+    }
+    
+    const parsed = parseFloat(value as string);
     return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
   };
   
   const safeParseBool = (value: string | null): boolean | undefined => {
     if (!value) return undefined;
+    
+    // Security check: Validate input
+    if (securityManager) {
+      const inputValidation = securityManager.validateInput(value, 10);
+      if (!inputValidation.valid) {
+        warnings.push(`Input validation failed: ${inputValidation.error}`);
+        return undefined;
+      }
+      value = inputValidation.sanitized || value;
+    }
+    
     return value === '1' || value === 'true';
   };
   
   const sanitizeString = (value: string | null, maxLength: number = 100): string | undefined => {
     if (!value) return undefined;
+    
+    // Security check: Use SecurityManager for input validation
+    if (securityManager) {
+      const inputValidation = securityManager.validateInput(value, maxLength);
+      if (!inputValidation.valid) {
+        warnings.push(`Input validation failed: ${inputValidation.error}`);
+        return undefined;
+      }
+      return inputValidation.sanitized;
+    }
+    
+    // Fallback to basic sanitization
     const sanitized = value.replace(/[<>\"'&]/g, '').substring(0, maxLength);
     return sanitized.length > 0 ? sanitized : undefined;
   };
@@ -158,8 +249,8 @@ export function parseBootConfig(): {config: BootConfig; warnings: string[]} {
   
   if (params.has("difficulty")) {
     const difficulty = sanitizeString(params.get("difficulty"), 20);
-    if (difficulty && ['normal', 'hard', 'custom'].includes(difficulty)) {
-      config.difficulty = difficulty as 'normal'|'hard'|'custom';
+    if (difficulty && ['easy', 'normal', 'hard', 'extreme'].includes(difficulty)) {
+      config.difficulty = difficulty as 'easy'|'normal'|'hard'|'extreme';
     } else {
       warnings.push("Invalid difficulty parameter");
     }
@@ -353,6 +444,87 @@ export function validateBootConfig(cfg: BootConfig): string[] {
   }
   
   return warnings;
+}
+
+/**
+ * Resolve boot configuration with proper precedence:
+ * Engine defaults → Pack defaults → SettingsStore → URL (wins for session)
+ */
+export function resolveBootConfig(
+  urlConfig: BootConfig, 
+  packDefaults?: PackDefaults
+): BootConfig {
+  const settingsStore = SettingsStore.getInstance();
+  const settings = settingsStore.getAllSettings();
+  
+  // Start with engine defaults
+  const resolved: BootConfig = { ...ENGINE_DEFAULTS };
+  
+  // Apply pack defaults (if available)
+  if (packDefaults) {
+    Object.assign(resolved, packDefaults);
+  }
+  
+  // Apply SettingsStore values
+  Object.assign(resolved, {
+    scale: settings.video.scaleMode,
+    fullscreen: settings.video.fullscreen,
+    fps: settings.video.fpsCap,
+    vsync: settings.video.vsync,
+    vol: settings.audio.master,
+    music: !settings.audio.muted && settings.audio.music > 0,
+    sfx: !settings.audio.muted && settings.audio.sfx > 0,
+    mute: settings.audio.muted,
+    latency: settings.audio.latency,
+    deadzone: settings.input.deadzonePct,
+    jumpbuf: settings.accessibility.lateJumpMs,
+    sticky: settings.accessibility.stickyGrab,
+    lang: settings.lang
+  });
+  
+  // Apply URL config (highest precedence for session)
+  Object.assign(resolved, urlConfig);
+  
+  return resolved;
+}
+
+/**
+ * Generate a boot link with non-default values
+ */
+export function generateBootLink(currentConfig: BootConfig, packDefaults?: PackDefaults): string {
+  const resolved = resolveBootConfig(currentConfig, packDefaults);
+  const params = new URLSearchParams();
+  
+  // Only include parameters that differ from engine defaults
+  Object.entries(resolved).forEach(([key, value]) => {
+    const defaultValue = ENGINE_DEFAULTS[key as keyof BootConfig];
+    if (value !== undefined && value !== defaultValue) {
+      if (typeof value === 'boolean') {
+        if (value) params.set(key, '1');
+      } else {
+        params.set(key, value.toString());
+      }
+    }
+  });
+  
+  const queryString = params.toString();
+  return queryString ? `${window.location.origin}${window.location.pathname}?${queryString}` : 
+                      `${window.location.origin}${window.location.pathname}`;
+}
+
+/**
+ * Copy boot link to clipboard
+ */
+export async function copyBootLink(currentConfig: BootConfig, packDefaults?: PackDefaults): Promise<boolean> {
+  try {
+    const bootLink = generateBootLink(currentConfig, packDefaults);
+    await navigator.clipboard.writeText(bootLink);
+    console.log("Boot link copied to clipboard:", bootLink);
+    return true;
+  } catch (error) {
+    console.error("Failed to copy boot link:", error);
+    return false;
+  }
 }
 
 function isValidUrl(url: string): boolean {

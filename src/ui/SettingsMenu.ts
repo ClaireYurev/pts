@@ -255,22 +255,21 @@ export class SettingsMenu {
     }
 
     private updateDisplay(): void {
-        // Update all display elements to reflect current settings
         const elements = {
-            bindMoveLeft: document.getElementById("bindMoveLeft"),
-            bindMoveRight: document.getElementById("bindMoveRight"),
-            bindMoveUp: document.getElementById("bindMoveUp"),
-            bindMoveDown: document.getElementById("bindMoveDown"),
-            bindJump: document.getElementById("bindJump"),
-            bindMenu: document.getElementById("bindMenu"),
+            bindMoveLeft: document.getElementById("bindMoveLeft") as HTMLElement,
+            bindMoveRight: document.getElementById("bindMoveRight") as HTMLElement,
+            bindMoveUp: document.getElementById("bindMoveUp") as HTMLElement,
+            bindMoveDown: document.getElementById("bindMoveDown") as HTMLElement,
+            bindJump: document.getElementById("bindJump") as HTMLElement,
+            bindMenu: document.getElementById("bindMenu") as HTMLElement,
+            volumeLabel: document.getElementById("volumeLabel") as HTMLElement,
             volumeSlider: document.getElementById("volumeSlider") as HTMLInputElement,
-            volumeLabel: document.getElementById("volumeLabel"),
             fullscreenToggle: document.getElementById("fullscreenToggle") as HTMLInputElement,
             fpsToggle: document.getElementById("fpsToggle") as HTMLInputElement,
             contrastToggle: document.getElementById("contrastToggle") as HTMLInputElement
         };
 
-        // Check if all elements exist
+        // Check for missing elements
         const missingElements = Object.entries(elements)
             .filter(([key, element]) => !element)
             .map(([key]) => key);
@@ -280,20 +279,18 @@ export class SettingsMenu {
             return;
         }
 
-        // Update text content
-        elements.bindMoveLeft!.textContent = this.settings.keyBindings.moveLeft;
-        elements.bindMoveRight!.textContent = this.settings.keyBindings.moveRight;
-        elements.bindMoveUp!.textContent = this.settings.keyBindings.moveUp;
-        elements.bindMoveDown!.textContent = this.settings.keyBindings.moveDown;
-        elements.bindJump!.textContent = this.settings.keyBindings.jump;
-        elements.bindMenu!.textContent = this.settings.keyBindings.menu;
-        elements.volumeLabel!.textContent = this.settings.volume + "%";
-        
-        // Update input values
-        elements.volumeSlider!.value = this.settings.volume.toString();
-        elements.fullscreenToggle!.checked = this.settings.fullscreen;
-        elements.fpsToggle!.checked = this.settings.fpsDisplay;
-        elements.contrastToggle!.checked = this.settings.highContrast;
+        // Update display elements safely
+        elements.bindMoveLeft.textContent = this.settings.keyBindings.moveLeft;
+        elements.bindMoveRight.textContent = this.settings.keyBindings.moveRight;
+        elements.bindMoveUp.textContent = this.settings.keyBindings.moveUp;
+        elements.bindMoveDown.textContent = this.settings.keyBindings.moveDown;
+        elements.bindJump.textContent = this.settings.keyBindings.jump;
+        elements.bindMenu.textContent = this.settings.keyBindings.menu;
+        elements.volumeLabel.textContent = this.settings.volume + "%";
+        elements.volumeSlider.value = this.settings.volume.toString();
+        elements.fullscreenToggle.checked = this.settings.fullscreen;
+        elements.fpsToggle.checked = this.settings.fpsDisplay;
+        elements.contrastToggle.checked = this.settings.highContrast;
     }
 
     private loadSettings(): Settings {

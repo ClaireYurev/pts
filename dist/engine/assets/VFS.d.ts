@@ -2,63 +2,64 @@
  * Virtual File System for asset loading
  * Supports built-in, remote URL, and local file sources with caching
  */
-export interface VFSCacheEntry {
-    hash: string;
-    data: any;
-    timestamp: number;
-    type: 'json' | 'image' | 'audio';
-}
 export interface VFSConfig {
+    builtInPath?: string;
     cacheEnabled?: boolean;
-    cacheExpiryHours?: number;
     maxCacheSize?: number;
+    cacheExpiryHours?: number;
+}
+export interface VFSStats {
+    totalRequests: number;
+    cacheHits: number;
+    cacheMisses: number;
+    totalSize: number;
+    cachedFiles: number;
 }
 export declare class VFS {
-    private cache;
     private config;
-    private idb;
+    private cache;
+    private cacheSize;
+    private stats;
     constructor(config?: VFSConfig);
-    private initCache;
     /**
-     * Read JSON data from path or URL
+     * Read JSON data from various sources
      */
-    readJson(pathOrUrl: string): Promise<any>;
+    readJson(path: string): Promise<any>;
     /**
-     * Read image data from path or URL
+     * Read image data from various sources
      */
-    readImage(pathOrUrl: string): Promise<HTMLImageElement>;
+    readImage(path: string): Promise<HTMLImageElement>;
     /**
-     * Read audio data from path or URL
+     * Read audio data from various sources
      */
-    readAudio(pathOrUrl: string): Promise<ArrayBuffer>;
+    readAudio(path: string): Promise<ArrayBuffer>;
     /**
-     * Read local file from File object
+     * Read text data from various sources
      */
-    readLocalFile(file: File): Promise<any>;
-    /**
-     * Install local file to cache
-     */
-    installLocalFile(file: File, id: string): Promise<void>;
+    readText(path: string): Promise<string>;
+    private readBuiltInJson;
+    private readBuiltInText;
+    private readBuiltInAudio;
+    private loadBuiltInImage;
+    private readUrlJson;
+    private readUrlText;
+    private readUrlAudio;
+    private loadUrlImage;
+    private readFileJson;
+    private readFileText;
+    private readFileAudio;
+    private loadFileImage;
+    private isBuiltInPath;
     private isUrl;
-    private fetchFromUrl;
-    private fetchFromPath;
-    private getFromCache;
-    private setCache;
-    private setCacheToDB;
-    private isCacheValid;
-    private cleanupCache;
-    private generateHash;
-    private getFileType;
-    /**
-     * Clear all cached data
-     */
-    clearCache(): Promise<void>;
-    /**
-     * Get cache statistics
-     */
-    getCacheStats(): {
-        memoryEntries: number;
-        totalSize: number;
-    };
+    private isFile;
+    private cacheData;
+    private estimateDataSize;
+    clearCache(): void;
+    getCacheStats(): VFSStats;
+    setCacheEnabled(enabled: boolean): void;
+    setMaxCacheSize(size: number): void;
+    validatePath(path: string): Promise<boolean>;
+    getSupportedFormats(): string[];
+    get vfs(): VFS;
 }
 //# sourceMappingURL=VFS.d.ts.map

@@ -10,6 +10,8 @@ export class Entity {
         this.position = new Vec2(x, y);
         this.velocity = new Vec2(0, 0);
         this.animationController = new AnimationController();
+        this.id = Math.random().toString(36).substr(2, 9);
+        this.previousPosition = new Vec2(x, y);
     }
     getCollider() {
         return {

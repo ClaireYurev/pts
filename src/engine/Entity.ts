@@ -17,11 +17,15 @@ export class Entity {
     public height: number = 32;
     public health: number = 100;
     public inventory: string[] = [];
+    public id: string;
+    public previousPosition: Vector2;
 
     constructor(x: number = 0, y: number = 0) {
         this.position = new Vec2(x, y);
         this.velocity = new Vec2(0, 0);
         this.animationController = new AnimationController();
+        this.id = Math.random().toString(36).substr(2, 9);
+        this.previousPosition = new Vec2(x, y);
     }
 
     public getCollider(): Collider {

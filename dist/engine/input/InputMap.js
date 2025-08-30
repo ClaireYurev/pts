@@ -42,6 +42,31 @@ export class InputMap {
         this.setupEventListeners();
     }
     /**
+     * Load a preset configuration
+     */
+    loadPreset(presetName) {
+        const preset = InputMap.PRESETS[presetName];
+        if (!preset) {
+            console.warn(`Preset "${presetName}" not found`);
+            return false;
+        }
+        this.profile = { ...this.profile, ...preset };
+        console.log(`Loaded preset: ${presetName}`);
+        return true;
+    }
+    /**
+     * Get available preset names
+     */
+    getAvailablePresets() {
+        return Object.keys(InputMap.PRESETS);
+    }
+    /**
+     * Get preset configuration
+     */
+    getPreset(presetName) {
+        return InputMap.PRESETS[presetName] || null;
+    }
+    /**
      * Check if an action is currently pressed
      */
     isDown(action) {
@@ -420,4 +445,57 @@ export class InputMap {
         window.removeEventListener('gamepaddisconnected', this.handleGamepadDisconnected.bind(this));
     }
 }
+// Preset configurations
+InputMap.PRESETS = {
+    classic: {
+        keyboard: {
+            Left: 'ArrowLeft',
+            Right: 'ArrowRight',
+            Up: 'ArrowUp',
+            Down: 'ArrowDown',
+            Jump: 'Space',
+            Action: 'KeyZ',
+            Block: 'KeyX',
+            Pause: 'Escape'
+        },
+        gamepad: {
+            Left: 'DPadLeft',
+            Right: 'DPadRight',
+            Up: 'DPadUp',
+            Down: 'DPadDown',
+            Jump: 'ButtonA',
+            Action: 'ButtonB',
+            Block: 'ButtonX',
+            Pause: 'ButtonStart'
+        },
+        deadzonePct: 20,
+        lateJumpMs: 60,
+        stickyGrab: false
+    },
+    wasd: {
+        keyboard: {
+            Left: 'KeyA',
+            Right: 'KeyD',
+            Up: 'KeyW',
+            Down: 'KeyS',
+            Jump: 'Space',
+            Action: 'KeyE',
+            Block: 'KeyQ',
+            Pause: 'Escape'
+        },
+        gamepad: {
+            Left: 'DPadLeft',
+            Right: 'DPadRight',
+            Up: 'DPadUp',
+            Down: 'DPadDown',
+            Jump: 'ButtonA',
+            Action: 'ButtonB',
+            Block: 'ButtonX',
+            Pause: 'ButtonStart'
+        },
+        deadzonePct: 15,
+        lateJumpMs: 80,
+        stickyGrab: true
+    }
+};
 //# sourceMappingURL=InputMap.js.map

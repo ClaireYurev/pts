@@ -4,244 +4,250 @@ import { AudioLatency } from './types.js';
  * AudioManager - Handles audio playback with volume control and autoplay policy compliance
  */
 export class AudioManager {
+    private audioContext: AudioContext | null = null;
+    private masterGain: GainNode | null = null;
+    private musicGain: GainNode | null = null;
+    private sfxGain: GainNode | null = null;
+    
+    // Volume levels (0.0 to 1.0)
     private masterVolume = 1.0;
     private musicVolume = 0.8;
-    private sfxVolume = 1.0;
-    private muted = false;
-    private latencyHint: AudioLatency = 'auto';
+    private sfxVolume = 0.9;
+    private isMuted = true; // Start muted for autoplay safety
     
-    // Audio context for Web Audio API
-    private audioContext: AudioContext | null = null;
-    private gainNode: GainNode | null = null;
+    // Audio buffers cache
+    private audioBuffers: Map<string, AudioBuffer> = new Map();
+    private activeMusic: AudioBufferSourceNode | null = null;
+    private activeSfx: Set<AudioBufferSourceNode> = new Set();
     
-    // Track if user has interacted (for autoplay policy)
-    private hasUserInteracted = false;
-    
-    // Audio elements cache
-    private audioElements = new Map<string, HTMLAudioElement>();
-    
+    // Settings
+    private latencyMode: 'auto' | 'low' | 'compat' = 'auto';
+    private userInteracted = false;
+
     constructor() {
         this.initializeAudioContext();
-        this.setupUserInteractionHandling();
     }
-    
-    /**
-     * Initialize Web Audio API context
-     */
+
     private initializeAudioContext(): void {
         try {
-            // Create audio context with latency hint
+            // Create audio context with optimal settings
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                this.audioContext = new AudioContextClass({
-                    latencyHint: this.latencyHint === 'low' ? 'interactive' : 'balanced'
-                });
-                
-                // Create master gain node
-                this.gainNode = this.audioContext.createGain();
-                this.gainNode.connect(this.audioContext.destination);
-                
-                // Set initial volume
-                this.updateMasterGain();
-                
-                console.log('AudioManager: Web Audio API initialized successfully');
-            }
+            this.audioContext = new AudioContextClass({
+                latencyHint: this.getLatencyHint(),
+                sampleRate: 44100
+            });
+
+            // Create gain nodes for volume control
+            this.masterGain = this.audioContext.createGain();
+            this.musicGain = this.audioContext.createGain();
+            this.sfxGain = this.audioContext.createGain();
+
+            // Connect the gain chain
+            this.musicGain.connect(this.masterGain);
+            this.sfxGain.connect(this.masterGain);
+            this.masterGain.connect(this.audioContext.destination);
+
+            // Set initial volumes
+            this.updateVolumes();
+
+            console.log('AudioManager initialized successfully');
         } catch (error) {
-            console.warn('AudioManager: Web Audio API not available, falling back to HTML5 audio:', error);
+            console.error('Failed to initialize AudioManager:', error);
         }
     }
-    
-    /**
-     * Setup user interaction handling for autoplay policy compliance
-     */
-    private setupUserInteractionHandling(): void {
-        const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'click'];
-        
-        const handleUserInteraction = () => {
-            if (!this.hasUserInteracted) {
-                this.hasUserInteracted = true;
-                
-                // Resume audio context if suspended
-                if (this.audioContext && this.audioContext.state === 'suspended') {
-                    this.audioContext.resume().catch(error => {
-                        console.warn('AudioManager: Failed to resume audio context:', error);
-                    });
-                }
-                
-                // Remove event listeners after first interaction
-                interactionEvents.forEach(event => {
-                    document.removeEventListener(event, handleUserInteraction);
-                });
-                
-                console.log('AudioManager: User interaction detected, audio enabled');
-            }
-        };
-        
-        // Add event listeners
-        interactionEvents.forEach(event => {
-            document.addEventListener(event, handleUserInteraction, { once: true });
-        });
+
+    private getLatencyHint(): AudioContextLatencyCategory {
+        switch (this.latencyMode) {
+            case 'low':
+                return 'interactive';
+            case 'compat':
+                return 'balanced';
+            case 'auto':
+            default:
+                return 'interactive';
+        }
     }
-    
-    /**
-     * Set master volume (0.0 to 1.0)
-     */
+
+    public setLatencyMode(mode: 'auto' | 'low' | 'compat'): void {
+        this.latencyMode = mode;
+        // Note: AudioContext latency cannot be changed after creation
+        // This setting will apply to new contexts if recreated
+    }
+
+    public setLatencyHint(latency: 'auto' | 'low' | 'compat'): void {
+        this.setLatencyMode(latency);
+    }
+
+    public onUserInteraction(): void {
+        if (!this.userInteracted && this.audioContext) {
+            this.userInteracted = true;
+            
+            // Resume audio context if suspended
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+            
+            // Unmute if this is the first user interaction
+            if (this.isMuted) {
+                this.setMuted(false);
+            }
+            
+            console.log('AudioManager: User interaction detected, audio enabled');
+        }
+    }
+
+    public async loadAudio(url: string, type: 'music' | 'sfx' = 'sfx'): Promise<void> {
+        if (!this.audioContext) {
+            console.error('AudioContext not available');
+            return;
+        }
+
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            this.audioBuffers.set(url, audioBuffer);
+            console.log(`Audio loaded: ${url}`);
+        } catch (error) {
+            console.error(`Failed to load audio ${url}:`, error);
+        }
+    }
+
+    public playMusic(url: string, loop: boolean = true, fadeIn: number = 0): void {
+        if (!this.audioContext || !this.musicGain || this.isMuted) return;
+
+        const buffer = this.audioBuffers.get(url);
+        if (!buffer) {
+            console.warn(`Music not loaded: ${url}`);
+            return;
+        }
+
+        // Stop current music
+        this.stopMusic();
+
+        // Create new music source
+        this.activeMusic = this.audioContext.createBufferSource();
+        this.activeMusic.buffer = buffer;
+        this.activeMusic.loop = loop;
+
+        // Apply fade in if specified
+        if (fadeIn > 0) {
+            this.musicGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+            this.musicGain.gain.linearRampToValueAtTime(
+                this.musicVolume * this.masterVolume,
+                this.audioContext.currentTime + fadeIn
+            );
+        }
+
+        this.activeMusic.connect(this.musicGain);
+        this.activeMusic.start();
+    }
+
+    public stopMusic(fadeOut: number = 0): void {
+        if (!this.activeMusic || !this.audioContext) return;
+
+        if (fadeOut > 0) {
+            this.musicGain?.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + fadeOut);
+            setTimeout(() => {
+                this.activeMusic?.stop();
+                this.activeMusic = null;
+            }, fadeOut * 1000);
+        } else {
+            this.activeMusic.stop();
+            this.activeMusic = null;
+        }
+    }
+
+    public playSfx(url: string, volume: number = 1.0): void {
+        if (!this.audioContext || !this.sfxGain || this.isMuted) return;
+
+        const buffer = this.audioBuffers.get(url);
+        if (!buffer) {
+            console.warn(`SFX not loaded: ${url}`);
+            return;
+        }
+
+        const source = this.audioContext.createBufferSource();
+        source.buffer = buffer;
+
+        // Create temporary gain node for this SFX
+        const sfxGain = this.audioContext.createGain();
+        sfxGain.gain.value = volume * this.sfxVolume * this.masterVolume;
+
+        source.connect(sfxGain);
+        sfxGain.connect(this.sfxGain);
+
+        this.activeSfx.add(source);
+
+        source.onended = () => {
+            this.activeSfx.delete(source);
+        };
+
+        source.start();
+    }
+
+    public stopAllSfx(): void {
+        this.activeSfx.forEach(source => {
+            try {
+                source.stop();
+            } catch (e) {
+                // Source might already be stopped
+            }
+        });
+        this.activeSfx.clear();
+    }
+
+    // Volume controls
     public setMasterVolume(volume: number): void {
         this.masterVolume = Math.max(0, Math.min(1, volume));
-        this.updateMasterGain();
-        console.log(`AudioManager: Master volume set to ${this.masterVolume}`);
+        this.updateVolumes();
     }
-    
-    /**
-     * Set music volume (0.0 to 1.0)
-     */
+
     public setMusicVolume(volume: number): void {
         this.musicVolume = Math.max(0, Math.min(1, volume));
-        console.log(`AudioManager: Music volume set to ${this.musicVolume}`);
+        this.updateVolumes();
     }
-    
-    /**
-     * Set SFX volume (0.0 to 1.0)
-     */
+
     public setSfxVolume(volume: number): void {
         this.sfxVolume = Math.max(0, Math.min(1, volume));
-        console.log(`AudioManager: SFX volume set to ${this.sfxVolume}`);
+        this.updateVolumes();
     }
-    
-    /**
-     * Set muted state
-     */
+
     public setMuted(muted: boolean): void {
-        this.muted = muted;
-        this.updateMasterGain();
-        console.log(`AudioManager: Muted state set to ${this.muted}`);
+        this.isMuted = muted;
+        this.updateVolumes();
     }
-    
-    /**
-     * Check if audio is muted
-     */
-    public isMuted(): boolean {
-        return this.muted;
-    }
-    
-    /**
-     * Set audio latency hint
-     */
-    public setLatencyHint(hint: AudioLatency): void {
-        this.latencyHint = hint;
-        console.log(`AudioManager: Latency hint set to ${hint}`);
+
+    private updateVolumes(): void {
+        if (!this.masterGain || !this.musicGain || !this.sfxGain) return;
+
+        const effectiveMasterVolume = this.isMuted ? 0 : this.masterVolume;
         
-        // Reinitialize audio context with new latency hint if needed
-        if (this.audioContext && this.audioContext.state === 'running') {
-            // Note: AudioContext latency hint cannot be changed after creation
-            // This is stored for future context recreation
-        }
+        this.masterGain.gain.setValueAtTime(effectiveMasterVolume, this.audioContext?.currentTime || 0);
+        this.musicGain.gain.setValueAtTime(this.musicVolume, this.audioContext?.currentTime || 0);
+        this.sfxGain.gain.setValueAtTime(this.sfxVolume, this.audioContext?.currentTime || 0);
     }
-    
-    /**
-     * Get current volume levels
-     */
-    public getVolumes(): { master: number; music: number; sfx: number } {
-        return {
-            master: this.masterVolume,
-            music: this.musicVolume,
-            sfx: this.sfxVolume
-        };
-    }
-    
-    /**
-     * Get current latency hint
-     */
-    public getLatencyHint(): AudioLatency {
-        return this.latencyHint;
-    }
-    
-    /**
-     * Check if user has interacted (for autoplay policy)
-     */
-    public hasUserInteractedWithPage(): boolean {
-        return this.hasUserInteracted;
-    }
-    
-    /**
-     * Update master gain node
-     */
-    private updateMasterGain(): void {
-        if (this.gainNode) {
-            const effectiveVolume = this.muted ? 0 : this.masterVolume;
-            this.gainNode.gain.setValueAtTime(effectiveVolume, this.audioContext?.currentTime || 0);
-        }
-    }
-    
-    /**
-     * Play music track (stub implementation)
-     */
-    public playMusic(trackId: string): void {
-        console.log(`AudioManager: Playing music track ${trackId} (stub)`);
-        // TODO: Implement actual music playback
-    }
-    
-    /**
-     * Stop music (stub implementation)
-     */
-    public stopMusic(): void {
-        console.log('AudioManager: Stopping music (stub)');
-        // TODO: Implement actual music stop
-    }
-    
-    /**
-     * Play sound effect (stub implementation)
-     */
-    public playSfx(sfxId: string): void {
-        console.log(`AudioManager: Playing SFX ${sfxId} (stub)`);
-        // TODO: Implement actual SFX playback
-    }
-    
-    /**
-     * Load and cache audio element
-     */
-    public async loadAudio(src: string, id: string): Promise<HTMLAudioElement> {
-        if (this.audioElements.has(id)) {
-            return this.audioElements.get(id)!;
-        }
+
+    // Getters
+    public getMasterVolume(): number { return this.masterVolume; }
+    public getMusicVolume(): number { return this.musicVolume; }
+    public getSfxVolume(): number { return this.sfxVolume; }
+    public isAudioMuted(): boolean { return this.isMuted; }
+    public hasUserInteracted(): boolean { return this.userInteracted; }
+
+    // Cleanup
+    public dispose(): void {
+        this.stopMusic();
+        this.stopAllSfx();
+        this.audioBuffers.clear();
         
-        return new Promise((resolve, reject) => {
-            const audio = new Audio();
-            
-            audio.oncanplaythrough = () => {
-                this.audioElements.set(id, audio);
-                resolve(audio);
-            };
-            
-            audio.onerror = () => {
-                reject(new Error(`Failed to load audio: ${src}`));
-            };
-            
-            audio.src = src;
-            audio.load();
-        });
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
     }
-    
-    /**
-     * Clean up resources
-     */
+
     public cleanup(): void {
-        try {
-            // Stop and clear all audio elements
-            this.audioElements.forEach(audio => {
-                audio.pause();
-                audio.src = '';
-            });
-            this.audioElements.clear();
-            
-            // Close audio context
-            if (this.audioContext && this.audioContext.state !== 'closed') {
-                this.audioContext.close();
-            }
-            
-            console.log('AudioManager: Cleanup completed');
-        } catch (error) {
-            console.error('AudioManager: Error during cleanup:', error);
-        }
+        this.dispose();
     }
 } 

@@ -10,7 +10,7 @@ export type BootConfig = {
     sword?: boolean;
     time?: number;
     seed?: number;
-    difficulty?: 'normal' | 'hard' | 'custom';
+    difficulty?: 'easy' | 'normal' | 'hard' | 'extreme';
     noclip?: boolean;
     god?: boolean;
     infTime?: boolean;
@@ -38,9 +38,30 @@ export type BootConfig = {
     slot?: 1 | 2 | 3 | 'Q';
     editor?: boolean;
 };
+export interface PackDefaults {
+    level?: number;
+    health?: number;
+    maxhealth?: number;
+    difficulty?: string;
+    cutscenes?: boolean;
+    [key: string]: any;
+}
 export declare function parseBootConfig(): {
     config: BootConfig;
     warnings: string[];
 };
 export declare function validateBootConfig(cfg: BootConfig): string[];
+/**
+ * Resolve boot configuration with proper precedence:
+ * Engine defaults → Pack defaults → SettingsStore → URL (wins for session)
+ */
+export declare function resolveBootConfig(urlConfig: BootConfig, packDefaults?: PackDefaults): BootConfig;
+/**
+ * Generate a boot link with non-default values
+ */
+export declare function generateBootLink(currentConfig: BootConfig, packDefaults?: PackDefaults): string;
+/**
+ * Copy boot link to clipboard
+ */
+export declare function copyBootLink(currentConfig: BootConfig, packDefaults?: PackDefaults): Promise<boolean>;
 //# sourceMappingURL=BootConfig.d.ts.map

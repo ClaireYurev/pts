@@ -2,6 +2,8 @@ export interface GamepadConfig {
   deadzonePct: number;
   pollInterval: number;
   maxGamepads: number;
+  crossBrowserCompatibility: boolean;
+  inputQuirksHandling: boolean;
 }
 
 export interface GamepadButton {
@@ -22,6 +24,16 @@ export interface GamepadData {
   buttons: GamepadButton[];
   axes: GamepadAxis[];
   timestamp: number;
+  browser: string;
+  quirks: GamepadQuirks;
+}
+
+export interface GamepadQuirks {
+  needsDeadzoneAdjustment: boolean;
+  hasStickDrift: boolean;
+  buttonMapping: Record<string, number>;
+  axisMapping: Record<string, number>;
+  browserSpecific: Record<string, any>;
 }
 
 export class Gamepad {
@@ -30,15 +42,82 @@ export class Gamepad {
   private pollInterval: number | null = null;
   private lastPollTime: number = 0;
 
+  // Cross-browser detection
+  private isChrome = navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Edge');
+  private isFirefox = navigator.userAgent.includes('Firefox');
+  private isSafari = navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome');
+  private isEdge = navigator.userAgent.includes('Edge');
+
+  // Browser-specific quirks
+  private chromeQuirks = {
+    needsDeadzoneAdjustment: true,
+    hasStickDrift: false,
+    buttonMapping: {
+      'A': 0, 'B': 1, 'X': 2, 'Y': 3,
+      'L1': 4, 'R1': 5, 'L2': 6, 'R2': 7,
+      'Select': 8, 'Start': 9, 'L3': 10, 'R3': 11,
+      'DPadUp': 12, 'DPadDown': 13, 'DPadLeft': 14, 'DPadRight': 15
+    },
+    axisMapping: {
+      'LeftStickX': 0, 'LeftStickY': 1,
+      'RightStickX': 2, 'RightStickY': 3
+    },
+    browserSpecific: {
+      chromeSpecific: true,
+      requiresUserGesture: true
+    }
+  };
+
+  private firefoxQuirks = {
+    needsDeadzoneAdjustment: true,
+    hasStickDrift: true,
+    buttonMapping: {
+      'A': 0, 'B': 1, 'X': 2, 'Y': 3,
+      'L1': 4, 'R1': 5, 'L2': 6, 'R2': 7,
+      'Select': 8, 'Start': 9, 'L3': 10, 'R3': 11,
+      'DPadUp': 12, 'DPadDown': 13, 'DPadLeft': 14, 'DPadRight': 15
+    },
+    axisMapping: {
+      'LeftStickX': 0, 'LeftStickY': 1,
+      'RightStickX': 2, 'RightStickY': 3
+    },
+    browserSpecific: {
+      firefoxSpecific: true,
+      requiresPermission: false
+    }
+  };
+
+  private safariQuirks = {
+    needsDeadzoneAdjustment: false,
+    hasStickDrift: false,
+    buttonMapping: {
+      'A': 0, 'B': 1, 'X': 2, 'Y': 3,
+      'L1': 4, 'R1': 5, 'L2': 6, 'R2': 7,
+      'Select': 8, 'Start': 9, 'L3': 10, 'R3': 11,
+      'DPadUp': 12, 'DPadDown': 13, 'DPadLeft': 14, 'DPadRight': 15
+    },
+    axisMapping: {
+      'LeftStickX': 0, 'LeftStickY': 1,
+      'RightStickX': 2, 'RightStickY': 3
+    },
+    browserSpecific: {
+      safariSpecific: true,
+      limitedSupport: true
+    }
+  };
+
   constructor(config: Partial<GamepadConfig> = {}) {
     this.config = {
       deadzonePct: 15,
       pollInterval: 16, // ~60fps
       maxGamepads: 4,
+      crossBrowserCompatibility: true,
+      inputQuirksHandling: true,
       ...config
     };
 
     this.setupEventListeners();
+    this.detectBrowserQuirks();
   }
 
   /**
@@ -268,7 +347,9 @@ export class Gamepad {
       connected: gamepad.connected,
       buttons: buttons,
       axes: axes,
-      timestamp: gamepad.timestamp
+      timestamp: gamepad.timestamp,
+      browser: navigator.userAgent,
+      quirks: this.getQuirks(gamepad.id) // Pass gamepad ID to get quirks
     });
   }
 
@@ -395,5 +476,40 @@ export class Gamepad {
     this.stop();
     window.removeEventListener('gamepadconnected', this.handleGamepadConnected.bind(this));
     window.removeEventListener('gamepaddisconnected', this.handleGamepadDisconnected.bind(this));
+  }
+
+  private detectBrowserQuirks(): void {
+    console.log(`Gamepad: Browser detected - Chrome: ${this.isChrome}, Firefox: ${this.isFirefox}, Safari: ${this.isSafari}, Edge: ${this.isEdge}`);
+    
+    if (this.config.crossBrowserCompatibility) {
+      // Apply browser-specific optimizations
+      if (this.isFirefox) {
+        // Firefox has different gamepad API behavior
+        this.config.pollInterval = 20; // Slightly slower polling for Firefox
+        console.log('Gamepad: Applied Firefox-specific optimizations');
+      } else if (this.isSafari) {
+        // Safari has limited gamepad support
+        this.config.maxGamepads = 1;
+        console.log('Gamepad: Applied Safari-specific optimizations');
+      }
+    }
+  }
+
+  private getQuirks(gamepadId: string): GamepadQuirks {
+    if (this.isChrome && gamepadId.includes('Chrome')) {
+      return this.chromeQuirks;
+    } else if (this.isFirefox && gamepadId.includes('Firefox')) {
+      return this.firefoxQuirks;
+    } else if (this.isSafari && gamepadId.includes('Safari')) {
+      return this.safariQuirks;
+    } else {
+      return {
+        needsDeadzoneAdjustment: false,
+        hasStickDrift: false,
+        buttonMapping: {},
+        axisMapping: {},
+        browserSpecific: {}
+      };
+    }
   }
 } 

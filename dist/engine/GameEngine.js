@@ -8,6 +8,10 @@ import { GameLoop } from "./GameLoop.js";
 import { Entity } from "./Entity.js";
 import { GamePackLoader } from "./GamePackLoader.js";
 import { PauseManager } from "./PauseManager.js";
+import { AudioManager } from "./AudioManager.js";
+import { SettingsStore } from "./SettingsStore.js";
+import { SaveManager } from "./SaveManager.js";
+import { PiMenu } from "../ui/PiMenu.js";
 import { CheatManager, CheatFlag } from "../dev/CheatManager.js";
 import { FreeCamera } from "../dev/FreeCamera.js";
 import { DebugOverlay } from "../dev/DebugOverlay.js";
@@ -30,6 +34,12 @@ export class GameEngine {
         this.stateMachine = new StateMachine();
         this.packLoader = new GamePackLoader();
         this.pauseManager = new PauseManager();
+        // Initialize audio and settings
+        this.audioManager = new AudioManager();
+        this.settingsStore = SettingsStore.getInstance();
+        this.saveManager = new SaveManager();
+        // Initialize UI
+        this.piMenu = new PiMenu(this.pauseManager, this.saveManager, this.settingsStore);
         // Initialize dev tools and cheats
         this.cheatManager = new CheatManager();
         this.freeCamera = new FreeCamera();
@@ -39,12 +49,16 @@ export class GameEngine {
         this.loop = new GameLoop(this.update.bind(this), this.render.bind(this));
         // Apply optimal performance settings for current browser
         this.loop.applyOptimalSettings();
+        // Apply settings to renderer and audio
+        this.applySettings();
         // Add some test entities for demonstration
         this.createTestEntities();
         // Set up collision system with player entity reference
         this.collision.setPlayerEntityGetter(() => this.entities[0] || null);
         // Initialize performance monitoring
         this.initializePerformanceMonitoring();
+        // Setup user interaction handling for audio
+        this.setupUserInteractionHandling();
     }
     initializePerformanceMonitoring() {
         // Monitor performance and adjust settings if needed
@@ -156,6 +170,8 @@ export class GameEngine {
             }
             // Check collisions (with NoClip cheat integration)
             this.checkCollisionsWithCheats();
+            // Handle trigger catch-up for fast-moving entities
+            this.handleTriggerCatchUp();
             // Handle player input for test
             this.handlePlayerInput();
         }
@@ -355,6 +371,63 @@ export class GameEngine {
             console.error("Error in player input handling:", error);
         }
     }
+    handleTriggerCatchUp() {
+        // Handle trigger catch-up for fast-moving entities
+        // This prevents entities from moving so fast they skip over triggers
+        for (const entity of this.entities) {
+            if (entity.velocity && (Math.abs(entity.velocity.x) > 100 || Math.abs(entity.velocity.y) > 100)) {
+                // Entity is moving fast, check for triggers along the path
+                this.checkTriggerPath(entity);
+            }
+        }
+    }
+    checkTriggerPath(entity) {
+        // Get entity's old and new positions
+        const oldPos = entity.previousPosition || entity.position;
+        const newPos = entity.position;
+        // Calculate movement vector
+        const deltaX = newPos.x - oldPos.x;
+        const deltaY = newPos.y - oldPos.y;
+        // If movement is significant, check for triggers along the path
+        if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+            // Sample points along the movement path
+            const steps = Math.max(Math.ceil(Math.abs(deltaX) / 10), Math.ceil(Math.abs(deltaY) / 10));
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const checkX = oldPos.x + deltaX * t;
+                const checkY = oldPos.y + deltaY * t;
+                // Check for triggers at this position
+                this.checkTriggersAtPosition(entity, checkX, checkY);
+            }
+        }
+    }
+    checkTriggersAtPosition(entity, x, y) {
+        // This would check for triggers at the given position
+        // and fire them if the entity should trigger them
+        // Implementation depends on your trigger system
+        // Example implementation:
+        const triggers = this.getTriggersAtPosition(x, y);
+        triggers.forEach(trigger => {
+            if (this.shouldTrigger(entity, trigger)) {
+                this.fireTrigger(trigger, entity);
+            }
+        });
+    }
+    getTriggersAtPosition(x, y) {
+        // This would return all triggers at the given position
+        // Implementation depends on your trigger system
+        return [];
+    }
+    shouldTrigger(entity, trigger) {
+        // Check if the entity should trigger this trigger
+        // Implementation depends on your trigger system
+        return true;
+    }
+    fireTrigger(trigger, entity) {
+        // Fire the trigger for the entity
+        // Implementation depends on your trigger system
+        console.log(`Trigger fired: ${trigger.id} by entity ${entity.id}`);
+    }
     /**
      * Check if player is near a ledge for sticky grab
      */
@@ -457,14 +530,13 @@ export class GameEngine {
                 // Update debug info
                 this.debugOverlay.update({
                     fps: this.loop.getFPS(),
+                    frameTime: 16.67, // Default 60fps frame time
+                    entities: this.entities.length,
                     playerPosition: player.position,
-                    playerState: 'idle', // Entity doesn't have state property
-                    entities: this.entities.map(e => ({
-                        id: 'entity', // Entity doesn't have id property
-                        position: e.position,
-                        bounds: e.getCollider()
-                    }))
-                }, 0); // deltaTime not available here
+                    playerVelocity: player.velocity,
+                    playerHealth: player.health,
+                    gameTime: Date.now()
+                });
                 // Render the debug overlay
                 this.debugOverlay.render();
             }
@@ -647,6 +719,78 @@ export class GameEngine {
     }
     getAllPlatforms() {
         return PlatformManager.getAllPlatforms();
+    }
+    // Settings and audio management
+    applySettings() {
+        const videoSettings = this.settingsStore.getVideoSettings();
+        const audioSettings = this.settingsStore.getAudioSettings();
+        // Apply video settings to renderer
+        this.renderer.setScaleMode(videoSettings.scaleMode);
+        this.renderer.setSafeArea(videoSettings.safeAreaPct);
+        if (videoSettings.fpsCap) {
+            this.loop.setFixedTimestepRate(1 / videoSettings.fpsCap);
+        }
+        // Note: vsync is handled by the browser, no direct control needed
+        // Apply audio settings
+        this.audioManager.setMasterVolume(audioSettings.master);
+        this.audioManager.setMusicVolume(audioSettings.music);
+        this.audioManager.setSfxVolume(audioSettings.sfx);
+        this.audioManager.setMuted(audioSettings.muted);
+        this.audioManager.setLatencyMode(audioSettings.latency);
+        // Setup settings change listeners
+        this.setupSettingsListeners();
+    }
+    setupSettingsListeners() {
+        // Video settings listeners
+        this.settingsStore.addListener('video.scaleMode', (mode) => {
+            this.renderer.setScaleMode(mode);
+        });
+        this.settingsStore.addListener('video.safeAreaPct', (pct) => {
+            this.renderer.setSafeArea(pct);
+        });
+        this.settingsStore.addListener('video.fpsCap', (fps) => {
+            if (fps) {
+                this.loop.setFixedTimestepRate(1 / fps);
+            }
+        });
+        // Note: vsync is handled by the browser, no direct control needed
+        // Audio settings listeners
+        this.settingsStore.addListener('audio.master', (volume) => {
+            this.audioManager.setMasterVolume(volume);
+        });
+        this.settingsStore.addListener('audio.music', (volume) => {
+            this.audioManager.setMusicVolume(volume);
+        });
+        this.settingsStore.addListener('audio.sfx', (volume) => {
+            this.audioManager.setSfxVolume(volume);
+        });
+        this.settingsStore.addListener('audio.muted', (muted) => {
+            this.audioManager.setMuted(muted);
+        });
+        this.settingsStore.addListener('audio.latency', (latency) => {
+            this.audioManager.setLatencyMode(latency);
+        });
+    }
+    setupUserInteractionHandling() {
+        const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'click'];
+        const handleUserInteraction = () => {
+            this.audioManager.onUserInteraction();
+            // Remove event listeners after first interaction
+            interactionEvents.forEach(event => {
+                document.removeEventListener(event, handleUserInteraction);
+            });
+        };
+        // Add event listeners for user interaction
+        interactionEvents.forEach(event => {
+            document.addEventListener(event, handleUserInteraction, { once: true });
+        });
+    }
+    // Public getters for audio and settings
+    getAudioManager() {
+        return this.audioManager;
+    }
+    getSettingsStore() {
+        return this.settingsStore;
     }
 }
 //# sourceMappingURL=GameEngine.js.map

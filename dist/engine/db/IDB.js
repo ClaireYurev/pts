@@ -6,91 +6,162 @@ export class IDB {
         this.db = null;
         this.config = config;
     }
-    async openDB() {
-        if (this.db) {
-            return this.db;
-        }
+    async open() {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.config.name, this.config.version);
             request.onerror = () => {
-                reject(new Error(`Failed to open database: ${request.error?.message}`));
+                reject(new Error(`Failed to open IndexedDB: ${request.error?.message}`));
             };
             request.onsuccess = () => {
                 this.db = request.result;
-                resolve(this.db);
+                resolve();
             };
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                // Create object store if it doesn't exist
-                if (!db.objectStoreNames.contains(this.config.storeName)) {
-                    db.createObjectStore(this.config.storeName, { keyPath: 'slot' });
-                }
+                // Create object stores
+                this.config.stores.forEach(storeConfig => {
+                    if (!db.objectStoreNames.contains(storeConfig.name)) {
+                        const store = db.createObjectStore(storeConfig.name, { keyPath: storeConfig.keyPath });
+                        // Create indexes
+                        storeConfig.indexes?.forEach(indexConfig => {
+                            store.createIndex(indexConfig.name, indexConfig.keyPath, indexConfig.options);
+                        });
+                    }
+                });
             };
         });
     }
-    async put(key, value) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction([this.config.storeName], 'readwrite');
-            const store = transaction.objectStore(this.config.storeName);
-            const request = store.put({ slot: key, data: value });
-            request.onerror = () => {
-                reject(new Error(`Failed to save data: ${request.error?.message}`));
-            };
-            request.onsuccess = () => {
-                resolve();
-            };
-        });
-    }
-    async get(key) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction([this.config.storeName], 'readonly');
-            const store = transaction.objectStore(this.config.storeName);
-            const request = store.get(key);
-            request.onerror = () => {
-                reject(new Error(`Failed to load data: ${request.error?.message}`));
-            };
-            request.onsuccess = () => {
-                const result = request.result;
-                resolve(result ? result.data : null);
-            };
-        });
-    }
-    async delete(key) {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction([this.config.storeName], 'readwrite');
-            const store = transaction.objectStore(this.config.storeName);
-            const request = store.delete(key);
-            request.onerror = () => {
-                reject(new Error(`Failed to delete data: ${request.error?.message}`));
-            };
-            request.onsuccess = () => {
-                resolve();
-            };
-        });
-    }
-    async getAll() {
-        const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction([this.config.storeName], 'readonly');
-            const store = transaction.objectStore(this.config.storeName);
-            const request = store.getAll();
-            request.onerror = () => {
-                reject(new Error(`Failed to load all data: ${request.error?.message}`));
-            };
-            request.onsuccess = () => {
-                const results = request.result;
-                resolve(results.map(item => ({ slot: item.slot, data: item.data })));
-            };
-        });
-    }
-    close() {
+    async close() {
         if (this.db) {
             this.db.close();
             this.db = null;
         }
+    }
+    async get(storeName, key) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.get(key);
+            request.onerror = () => {
+                reject(new Error(`Failed to get from ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve(request.result || null);
+            };
+        });
+    }
+    async put(storeName, value) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.put(value);
+            request.onerror = () => {
+                reject(new Error(`Failed to put to ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve();
+            };
+        });
+    }
+    async delete(storeName, key) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.delete(key);
+            request.onerror = () => {
+                reject(new Error(`Failed to delete from ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve();
+            };
+        });
+    }
+    async getAll(storeName) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.getAll();
+            request.onerror = () => {
+                reject(new Error(`Failed to get all from ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve(request.result || []);
+            };
+        });
+    }
+    async clear(storeName) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.clear();
+            request.onerror = () => {
+                reject(new Error(`Failed to clear ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve();
+            };
+        });
+    }
+    async count(storeName) {
+        if (!this.db) {
+            throw new Error('Database not open');
+        }
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                reject(new Error('Database not open'));
+                return;
+            }
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.count();
+            request.onerror = () => {
+                reject(new Error(`Failed to count ${storeName}: ${request.error?.message}`));
+            };
+            request.onsuccess = () => {
+                resolve(request.result);
+            };
+        });
+    }
+    isOpen() {
+        return this.db !== null;
+    }
+    getDatabaseName() {
+        return this.config.name;
     }
 }
 //# sourceMappingURL=IDB.js.map

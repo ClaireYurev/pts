@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Development Tools Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .game-canvas {
+            border: 2px solid #4a4a4a;
+            border-radius: 8px;
+            margin: 20px 0;
+            background: #000;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background: #5a5a5a;
+        }
+        button.active {
+            background: #28a745;
+        }
+        .cheat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .cheat-item {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #4a4a4a;
+        }
+        .cheat-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .cheat-description {
+            color: #ccc;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .cheat-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .status {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .debug-info {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .camera-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 300px;
+        }
+        .camera-controls button {
+            padding: 15px;
+            font-size: 16px;
+        }
+        .camera-controls button.center {
+            grid-column: 2;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Development Tools Test</h1>
+        
+        <div class="test-section">
+            <h2>Game Canvas</h2>
+            <canvas id="gameCanvas" class="game-canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="test-section">
+            <h2>CheatManager</h2>
+            <div class="controls">
+                <button id="toggle-dev-mode">Toggle Dev Mode</button>
+                <button id="reset-cheats">Reset All Cheats</button>
+                <button id="show-active-cheats">Show Active Cheats</button>
+            </div>
+            
+            <div class="cheat-grid" id="cheat-grid">
+                <!-- Cheat controls will be populated here -->
+            </div>
+            
+            <div class="status" id="cheat-status">
+                CheatManager Status: Initializing...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>DebugOverlay</h2>
+            <div class="controls">
+                <button id="toggle-debug">Toggle Debug (F3)</button>
+                <button id="show-fps-stats">Show FPS Stats</button>
+                <button id="add-test-aabb">Add Test AABB</button>
+                <button id="clear-aabbs">Clear AABBs</button>
+            </div>
+            
+            <div class="debug-info" id="debug-info">
+                Debug information will appear here when enabled
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>FreeCamera</h2>
+            <div class="controls">
+                <button id="toggle-free-camera">Toggle Free Camera (Ctrl+Shift+C)</button>
+                <button id="reset-camera">Reset Camera</button>
+                <button id="center-on-player">Center on Player</button>
+            </div>
+            
+            <div class="camera-controls">
+                <button id="camera-up">W</button>
+                <button id="camera-left">A</button>
+                <button id="camera-center" class="center">C</button>
+                <button id="camera-right">D</button>
+                <button id="camera-down">S</button>
+            </div>
+            
+            <div class="status" id="camera-status">
+                Camera Status: Disabled
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Trigger Catch-Up Test</h2>
+            <div class="controls">
+                <button id="spawn-fast-entity">Spawn Fast Entity</button>
+                <button id="add-test-trigger">Add Test Trigger</button>
+                <button id="test-trigger-catchup">Test Trigger Catch-Up</button>
+            </div>
+            
+            <div class="status" id="trigger-status">
+                Trigger system status will appear here
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { CheatManager, CheatFlag } from './src/dev/CheatManager.js';
+        import { DebugOverlay } from './src/dev/DebugOverlay.js';
+        import { FreeCamera } from './src/dev/FreeCamera.js';
+
+        let cheatManager = null;
+        let debugOverlay = null;
+        let freeCamera = null;
+        let gameCanvas = null;
+        let gameContext = null;
+        let lastTime = 0;
+        let entities = [];
+        let triggers = [];
+
+        // Initialize
+        function initialize() {
+            // Initialize canvas
+            gameCanvas = document.getElementById('gameCanvas');
+            gameContext = gameCanvas.getContext('2d');
+            
+            // Initialize development tools
+            cheatManager = new CheatManager();
+            debugOverlay = new DebugOverlay();
+            freeCamera = new FreeCamera();
+            
+            // Initialize debug overlay with canvas
+            debugOverlay.initialize(gameCanvas);
+            
+            // Set up entities
+            setupEntities();
+            
+            // Set up UI
+            setupUI();
+            
+            // Start game loop
+            gameLoop();
+            
+            console.log('Development tools test initialized');
+        }
+
+        function setupEntities() {
+            // Create test player entity
+            entities.push({
+                id: 'player',
+                position: { x: 400, y: 300 },
+                velocity: { x: 0, y: 0 },
+                size: { width: 20, height: 20 },
+                health: 100,
+                maxHealth: 100,
+                hasSword: false,
+                isPlayer: true
+            });
+
+            // Create some test entities
+            for (let i = 0; i < 5; i++) {
+                entities.push({
+                    id: `entity_${i}`,
+                    position: { x: 100 + i * 100, y: 100 + i * 50 },
+                    velocity: { x: 0, y: 0 },
+                    size: { width: 15, height: 15 },
+                    health: 50,
+                    maxHealth: 50,
+                    isEnemy: true
+                });
+            }
+        }
+
+        function setupUI() {
+            // CheatManager UI
+            setupCheatManagerUI();
+            
+            // DebugOverlay UI
+            setupDebugOverlayUI();
+            
+            // FreeCamera UI
+            setupFreeCameraUI();
+            
+            // Trigger system UI
+            setupTriggerUI();
+        }
+
+        function setupCheatManagerUI() {
+            const cheatGrid = document.getElementById('cheat-grid');
+            
+            // Create cheat controls
+            Object.values(CheatFlag).forEach(flag => {
+                const cheatItem = document.createElement('div');
+                cheatItem.className = 'cheat-item';
+                
+                const title = document.createElement('div');
+                title.className = 'cheat-title';
+                title.textContent = flag.replace('_', ' ').toUpperCase();
+                
+                const description = document.createElement('div');
+                description.className = 'cheat-description';
+                description.textContent = getCheatDescription(flag);
+                
+                const controls = document.createElement('div');
+                controls.className = 'cheat-controls';
+                
+                const toggleBtn = document.createElement('button');
+                toggleBtn.textContent = 'Toggle';
+                toggleBtn.onclick = () => {
+                    cheatManager.toggleCheat(flag);
+                    updateCheatUI();
+                };
+                
+                const valueDisplay = document.createElement('span');
+                valueDisplay.id = `cheat-${flag}-value`;
+                
+                controls.appendChild(toggleBtn);
+                controls.appendChild(valueDisplay);
+                
+                cheatItem.appendChild(title);
+                cheatItem.appendChild(description);
+                cheatItem.appendChild(controls);
+                
+                cheatGrid.appendChild(cheatItem);
+            });
+
+            // Control buttons
+            document.getElementById('toggle-dev-mode').onclick = () => {
+                cheatManager.setDevMode(!cheatManager.isEnabled());
+                updateCheatStatus();
+            };
+            
+            document.getElementById('reset-cheats').onclick = () => {
+                cheatManager.reset();
+                updateCheatUI();
+            };
+            
+            document.getElementById('show-active-cheats').onclick = () => {
+                const activeCheats = cheatManager.getActiveCheats();
+                alert(`Active cheats: ${activeCheats.join(', ') || 'None'}`);
+            };
+        }
+
+        function setupDebugOverlayUI() {
+            document.getElementById('toggle-debug').onclick = () => {
+                debugOverlay.toggle();
+                updateDebugStatus();
+            };
+            
+            document.getElementById('show-fps-stats').onclick = () => {
+                const fpsStats = debugOverlay.getFPSStats();
+                const frameTimeStats = debugOverlay.getFrameTimeStats();
+                alert(`FPS Stats:\nCurrent: ${fpsStats.current}\nAverage: ${fpsStats.average.toFixed(1)}\nMin: ${fpsStats.min}\nMax: ${fpsStats.max}\n\nFrame Time Stats:\nCurrent: ${frameTimeStats.current.toFixed(2)}ms\nAverage: ${frameTimeStats.average.toFixed(2)}ms`);
+            };
+            
+            document.getElementById('add-test-aabb').onclick = () => {
+                debugOverlay.addAABB({
+                    x: Math.random() * 700,
+                    y: Math.random() * 500,
+                    width: 50 + Math.random() * 100,
+                    height: 30 + Math.random() * 50,
+                    color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+                    label: 'Test AABB'
+                });
+            };
+            
+            document.getElementById('clear-aabbs').onclick = () => {
+                debugOverlay.clearAABBs();
+            };
+        }
+
+        function setupFreeCameraUI() {
+            document.getElementById('toggle-free-camera').onclick = () => {
+                freeCamera.toggle();
+                updateCameraStatus();
+            };
+            
+            document.getElementById('reset-camera').onclick = () => {
+                freeCamera.setPosition(0, 0);
+                freeCamera.setZoom(1.0);
+            };
+            
+            document.getElementById('center-on-player').onclick = () => {
+                const player = entities.find(e => e.isPlayer);
+                if (player) {
+                    freeCamera.setPosition(player.position.x, player.position.y);
+                }
+            };
+
+            // Camera movement buttons
+            document.getElementById('camera-up').onclick = () => {
+                const pos = freeCamera.getPosition();
+                freeCamera.setPosition(pos.x, pos.y - 50);
+            };
+            
+            document.getElementById('camera-down').onclick = () => {
+                const pos = freeCamera.getPosition();
+                freeCamera.setPosition(pos.x, pos.y + 50);
+            };
+            
+            document.getElementById('camera-left').onclick = () => {
+                const pos = freeCamera.getPosition();
+                freeCamera.setPosition(pos.x - 50, pos.y);
+            };
+            
+            document.getElementById('camera-right').onclick = () => {
+                const pos = freeCamera.getPosition();
+                freeCamera.setPosition(pos.x + 50, pos.y);
+            };
+            
+            document.getElementById('camera-center').onclick = () => {
+                freeCamera.setZoom(1.0);
+            };
+        }
+
+        function setupTriggerUI() {
+            document.getElementById('spawn-fast-entity').onclick = () => {
+                entities.push({
+                    id: `fast_entity_${Date.now()}`,
+                    position: { x: 0, y: 300 },
+                    velocity: { x: 200, y: 0 },
+                    size: { width: 10, height: 10 },
+                    health: 25,
+                    maxHealth: 25,
+                    isFast: true
+                });
+            };
+            
+            document.getElementById('add-test-trigger').onclick = () => {
+                triggers.push({
+                    id: `trigger_${Date.now()}`,
+                    x: 400,
+                    y: 300,
+                    width: 30,
+                    height: 30,
+                    active: true
+                });
+            };
+            
+            document.getElementById('test-trigger-catchup').onclick = () => {
+                testTriggerCatchUp();
+            };
+        }
+
+        function gameLoop(currentTime = 0) {
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            // Update entities
+            updateEntities(deltaTime);
+            
+            // Update development tools
+            updateDevTools(deltaTime);
+            
+            // Render
+            render();
+            
+            // Continue loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateEntities(deltaTime) {
+            entities.forEach(entity => {
+                // Update position
+                entity.position.x += entity.velocity.x * deltaTime;
+                entity.position.y += entity.velocity.y * deltaTime;
+                
+                // Apply gravity to non-player entities
+                if (!entity.isPlayer) {
+                    entity.velocity.y += 500 * deltaTime; // Gravity
+                }
+                
+                // Keep entities in bounds
+                if (entity.position.x < 0) entity.position.x = 0;
+                if (entity.position.x > 780) entity.position.x = 780;
+                if (entity.position.y < 0) entity.position.y = 0;
+                if (entity.position.y > 580) entity.position.y = 580;
+                
+                // Apply cheat effects
+                if (cheatManager) {
+                    cheatManager.applyCheatEffects(entity, { timer: currentTime / 1000 });
+                }
+            });
+        }
+
+        function updateDevTools(deltaTime) {
+            // Update debug overlay
+            if (debugOverlay) {
+                const player = entities.find(e => e.isPlayer);
+                debugOverlay.update({
+                    fps: 1 / deltaTime,
+                    frameTime: deltaTime * 1000,
+                    entities: entities.length,
+                    playerPosition: player ? player.position : { x: 0, y: 0 },
+                    playerVelocity: player ? player.velocity : { x: 0, y: 0 },
+                    playerHealth: player ? player.health : 0,
+                    gameTime: currentTime / 1000
+                });
+                debugOverlay.render();
+            }
+            
+            // Update free camera
+            if (freeCamera) {
+                freeCamera.update(deltaTime);
+                
+                // Set player as target for following
+                const player = entities.find(e => e.isPlayer);
+                if (player) {
+                    freeCamera.setTarget(player);
+                    freeCamera.updateFollowTarget(deltaTime);
+                }
+            }
+        }
+
+        function render() {
+            if (!gameContext) return;
+            
+            // Clear canvas
+            gameContext.fillStyle = '#000';
+            gameContext.fillRect(0, 0, 800, 600);
+            
+            // Get camera transform
+            let cameraX = 0, cameraY = 0, cameraZoom = 1;
+            if (freeCamera && freeCamera.isFreeCameraActive()) {
+                const pos = freeCamera.getPosition();
+                cameraX = pos.x;
+                cameraY = pos.y;
+                cameraZoom = freeCamera.getZoom();
+            }
+            
+            // Apply camera transform
+            gameContext.save();
+            gameContext.translate(400, 300);
+            gameContext.scale(cameraZoom, cameraZoom);
+            gameContext.translate(-cameraX, -cameraY);
+            
+            // Render entities
+            entities.forEach(entity => {
+                gameContext.fillStyle = entity.isPlayer ? '#00ff00' : 
+                                       entity.isEnemy ? '#ff0000' : 
+                                       entity.isFast ? '#ffff00' : '#ffffff';
+                gameContext.fillRect(
+                    entity.position.x - entity.size.width / 2,
+                    entity.position.y - entity.size.height / 2,
+                    entity.size.width,
+                    entity.size.height
+                );
+            });
+            
+            // Render triggers
+            triggers.forEach(trigger => {
+                gameContext.fillStyle = 'rgba(0, 255, 255, 0.3)';
+                gameContext.fillRect(trigger.x, trigger.y, trigger.width, trigger.height);
+                gameContext.strokeStyle = '#00ffff';
+                gameContext.strokeRect(trigger.x, trigger.y, trigger.width, trigger.height);
+            });
+            
+            gameContext.restore();
+        }
+
+        function updateCheatUI() {
+            Object.values(CheatFlag).forEach(flag => {
+                const valueDisplay = document.getElementById(`cheat-${flag}-value`);
+                if (valueDisplay) {
+                    const value = cheatManager.getValue(flag);
+                    const isActive = cheatManager.isActive(flag);
+                    valueDisplay.textContent = isActive ? 'ACTIVE' : `Value: ${value}`;
+                    valueDisplay.style.color = isActive ? '#28a745' : '#ccc';
+                }
+            });
+        }
+
+        function updateCheatStatus() {
+            const status = document.getElementById('cheat-status');
+            status.textContent = `CheatManager Status: ${cheatManager.isEnabled() ? 'Enabled' : 'Disabled'}`;
+        }
+
+        function updateDebugStatus() {
+            const info = document.getElementById('debug-info');
+            if (debugOverlay.isDebugVisible()) {
+                const debugInfo = debugOverlay.getDebugInfo();
+                if (debugInfo) {
+                    info.textContent = `Debug Info:
+FPS: ${debugInfo.fps.toFixed(1)}
+Frame Time: ${debugInfo.frameTime.toFixed(2)}ms
+Entities: ${debugInfo.entities}
+Player Pos: (${debugInfo.playerPosition.x.toFixed(1)}, ${debugInfo.playerPosition.y.toFixed(1)})
+Player Vel: (${debugInfo.playerVelocity.x.toFixed(1)}, ${debugInfo.playerVelocity.y.toFixed(1)})
+Health: ${debugInfo.playerHealth}
+Game Time: ${debugInfo.gameTime.toFixed(1)}s`;
+                }
+            } else {
+                info.textContent = 'Debug overlay disabled (press F3 to enable)';
+            }
+        }
+
+        function updateCameraStatus() {
+            const status = document.getElementById('camera-status');
+            const isActive = freeCamera.isFreeCameraActive();
+            status.textContent = `Camera Status: ${isActive ? 'Free Camera Active' : 'Following Player'}`;
+        }
+
+        function testTriggerCatchUp() {
+            const status = document.getElementById('trigger-status');
+            status.textContent = 'Trigger catch-up test: Spawned fast entity, check console for trigger events';
+            
+            // Simulate trigger catch-up
+            const fastEntity = entities.find(e => e.isFast);
+            if (fastEntity) {
+                // Simulate the trigger catch-up logic
+                const oldPos = { x: fastEntity.position.x - 100, y: fastEntity.position.y };
+                const newPos = fastEntity.position;
+                
+                // Check for triggers along the path
+                triggers.forEach(trigger => {
+                    if (isEntityCrossingTrigger(oldPos, newPos, trigger)) {
+                        console.log(`Trigger catch-up: Entity ${fastEntity.id} crossed trigger ${trigger.id}`);
+                    }
+                });
+            }
+        }
+
+        function isEntityCrossingTrigger(oldPos, newPos, trigger) {
+            // Simple line-rectangle intersection test
+            const line = { x1: oldPos.x, y1: oldPos.y, x2: newPos.x, y2: newPos.y };
+            const rect = { x: trigger.x, y: trigger.y, width: trigger.width, height: trigger.height };
+            
+            // Check if line intersects with rectangle
+            return lineIntersectsRect(line, rect);
+        }
+
+        function lineIntersectsRect(line, rect) {
+            // Simple intersection test - in a real implementation, this would be more sophisticated
+            const midX = (line.x1 + line.x2) / 2;
+            const midY = (line.y1 + line.y2) / 2;
+            
+            return midX >= rect.x && midX <= rect.x + rect.width &&
+                   midY >= rect.y && midY <= rect.y + rect.height;
+        }
+
+        function getCheatDescription(flag) {
+            const descriptions = {
+                [CheatFlag.GOD_MODE]: 'Player becomes invulnerable to damage',
+                [CheatFlag.NOCLIP]: 'Player can pass through walls and obstacles',
+                [CheatFlag.INFINITE_TIME]: 'Game timer never decreases',
+                [CheatFlag.GIVE_SWORD]: 'Gives player a sword (one-time use)',
+                [CheatFlag.SET_HEALTH]: 'Sets player health to specified value',
+                [CheatFlag.INFINITE_JUMP]: 'Player can jump infinitely',
+                [CheatFlag.SPEED_HACK]: 'Multiplies player movement speed',
+                [CheatFlag.REVEAL_ALL]: 'Reveals all hidden areas and items',
+                [CheatFlag.KILL_ALL_ENEMIES]: 'Instantly kills all enemies',
+                [CheatFlag.FREEZE_TIME]: 'Freezes the game timer'
+            };
+            return descriptions[flag] || 'No description available';
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html> 

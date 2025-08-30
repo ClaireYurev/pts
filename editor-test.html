@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS Visual Game Maker - Editor Test</title>
+    <link rel="stylesheet" href="editor.css">
+    <style>
+        .test-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        .test-info h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        .test-info ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .test-info li {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h3>Editor Test Features</h3>
+        <ul>
+            <li><strong>Grid Paint:</strong> Click tiles to paint</li>
+            <li><strong>Entity Placement:</strong> Select entities and place them</li>
+            <li><strong>Link Tool:</strong> Connect pressure plates to gates</li>
+            <li><strong>Export:</strong> Save as .ptspack</li>
+            <li><strong>Playtest:</strong> Test in-engine</li>
+            <li><strong>Keyboard:</strong> 1-5 for tools, Ctrl+S/O/E/P</li>
+        </ul>
+    </div>
+
+    <div id="editorContainer">
+        <!-- Header -->
+        <header class="editor-header">
+            <div class="header-left">
+                <h1>PrinceTS Visual Game Maker</h1>
+                <span class="version">v1.0.0 - Editor Test</span>
+            </div>
+            <div class="header-center">
+                <div class="mode-selector">
+                    <button class="mode-btn active" data-mode="tile">Tile Mode</button>
+                    <button class="mode-btn" data-mode="entity">Entity Mode</button>
+                    <button class="mode-btn" data-mode="link">Link Mode</button>
+                </div>
+            </div>
+            <div class="header-right">
+                <button id="importBtn" class="tool-btn">Import</button>
+                <button id="exportBtn" class="tool-btn">Export</button>
+                <button id="saveBtn" class="tool-btn">Save</button>
+                <button id="loadBtn" class="tool-btn">Load</button>
+                <button id="playtestBtn" class="tool-btn" style="background-color: #4CAF50;">Playtest</button>
+            </div>
+        </header>
+
+        <!-- Main Editor Area -->
+        <div class="editor-main">
+            <!-- Left Panel - Palettes -->
+            <div class="left-panel">
+                <!-- Tiles Tab -->
+                <div class="palette-section">
+                    <div class="palette-header">Tile Palette</div>
+                    <div class="palette-container">
+                        <div class="tile-grid">
+                            <div class="tile-item" data-tile="empty">
+                                <div class="tile-thumbnail" style="background-color: #1a1a1a; height: 32px;"></div>
+                                <div class="tile-label">Empty</div>
+                            </div>
+                            <div class="tile-item" data-tile="ground">
+                                <div class="tile-thumbnail" style="background-color: #8B4513; height: 32px;"></div>
+                                <div class="tile-label">Ground</div>
+                            </div>
+                            <div class="tile-item" data-tile="wall">
+                                <div class="tile-thumbnail" style="background-color: #696969; height: 32px;"></div>
+                                <div class="tile-label">Wall</div>
+                            </div>
+                            <div class="tile-item" data-tile="platform">
+                                <div class="tile-thumbnail" style="background-color: #A0522D; height: 32px;"></div>
+                                <div class="tile-label">Platform</div>
+                            </div>
+                            <div class="tile-item" data-tile="spike">
+                                <div class="tile-thumbnail" style="background-color: #FF4500; height: 32px;"></div>
+                                <div class="tile-label">Spike</div>
+                            </div>
+                            <div class="tile-item" data-tile="water">
+                                <div class="tile-thumbnail" style="background-color: #4169E1; height: 32px;"></div>
+                                <div class="tile-label">Water</div>
+                            </div>
+                            <div class="tile-item" data-tile="lava">
+                                <div class="tile-thumbnail" style="background-color: #DC143C; height: 32px;"></div>
+                                <div class="tile-label">Lava</div>
+                            </div>
+                            <div class="tile-item" data-tile="ice">
+                                <div class="tile-thumbnail" style="background-color: #87CEEB; height: 32px;"></div>
+                                <div class="tile-label">Ice</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entities Tab -->
+                <div class="palette-section">
+                    <div class="palette-header">Entity Palette</div>
+                    <div class="palette-container">
+                        <div class="entity-list">
+                            <div class="entity-item" data-entity="guard">
+                                <div class="entity-color" style="background-color: #FF6B6B;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Guard</div>
+                                    <div class="entity-description">Patrolling enemy</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="potion">
+                                <div class="entity-color" style="background-color: #4ECDC4;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Potion</div>
+                                    <div class="entity-description">Health restoration</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="sword">
+                                <div class="entity-color" style="background-color: #45B7D1;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Sword</div>
+                                    <div class="entity-description">Weapon</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="teleporter">
+                                <div class="entity-color" style="background-color: #96CEB4;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Teleporter</div>
+                                    <div class="entity-description">Transport device</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="crusher">
+                                <div class="entity-color" style="background-color: #FFEAA7;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Crusher</div>
+                                    <div class="entity-description">Moving hazard</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="pressurePlate">
+                                <div class="entity-color" style="background-color: #DDA0DD;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Pressure Plate</div>
+                                    <div class="entity-description">Activates gates</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="gate">
+                                <div class="entity-color" style="background-color: #98D8C8;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Gate</div>
+                                    <div class="entity-description">Barrier</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="looseTile">
+                                <div class="entity-color" style="background-color: #F7DC6F;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Loose Tile</div>
+                                    <div class="entity-description">Falling hazard</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="chopper">
+                                <div class="entity-color" style="background-color: #BB8FCE;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Chopper</div>
+                                    <div class="entity-description">Swinging blade</div>
+                                </div>
+                            </div>
+                            <div class="entity-item" data-entity="region">
+                                <div class="entity-color" style="background-color: #85C1E9;"></div>
+                                <div class="entity-info">
+                                    <div class="entity-name">Region</div>
+                                    <div class="entity-description">Trigger area</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Panel - Level Canvas -->
+            <div class="center-panel">
+                <div class="canvas-container">
+                    <canvas id="levelCanvas" width="800" height="600"></canvas>
+                    <div class="canvas-overlay">
+                        <div class="canvas-info">
+                            <span id="mousePos">Mouse: (0, 0)</span>
+                            <span id="gridPos">Grid: (0, 0)</span>
+                        </div>
+                        <div class="canvas-controls">
+                            <button id="resetCameraBtn" title="Reset Camera">🏠</button>
+                            <button id="zoomInBtn" title="Zoom In">🔍+</button>
+                            <button id="zoomOutBtn" title="Zoom Out">🔍-</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Tools and Properties -->
+            <div class="right-panel">
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-tab="properties">Properties</button>
+                    <button class="tab-btn" data-tab="scripts">Scripts</button>
+                    <button class="tab-btn" data-tab="cutscenes">Cutscenes</button>
+                    <button class="tab-btn" data-tab="settings">Settings</button>
+                </div>
+
+                <!-- Properties Tab -->
+                <div id="propertiesTab" class="tab-content active">
+                    <div class="properties-panel">
+                        <h3>Properties</h3>
+                        <div id="propertiesContent">
+                            <p>Select an object to edit its properties.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scripts Tab -->
+                <div id="scriptsTab" class="tab-content">
+                    <div id="scriptEditor" class="script-panel">
+                        <h3>Visual Script Editor</h3>
+                        <p>Create Event-Condition-Action rules for your game.</p>
+                        <div class="rules-container">
+                            <div class="rule-item">
+                                <div class="rule-header">
+                                    <div class="rule-enabled">
+                                        <input type="checkbox" checked>
+                                        <span>Rule 1</span>
+                                    </div>
+                                    <div class="rule-actions">
+                                        <button>✏️</button>
+                                        <button>🗑️</button>
+                                    </div>
+                                </div>
+                                <div class="rule-content">
+                                    <div class="rule-section">
+                                        <label>Event:</label>
+                                        <select>
+                                            <option>Player enters region</option>
+                                            <option>Entity destroyed</option>
+                                            <option>Time elapsed</option>
+                                        </select>
+                                    </div>
+                                    <div class="rule-section">
+                                        <label>Action:</label>
+                                        <select>
+                                            <option>Open gate</option>
+                                            <option>Spawn entity</option>
+                                            <option>Play sound</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cutscenes Tab -->
+                <div id="cutscenesTab" class="tab-content">
+                    <div id="cutsceneEditor" class="cutscene-panel">
+                        <h3>Cutscene Timeline</h3>
+                        <p>Create cinematic sequences for your game.</p>
+                        <div class="timeline">
+                            <div class="timeline-ruler">
+                                <div class="ruler-mark" style="left: 10%;">0s</div>
+                                <div class="ruler-mark" style="left: 30%;">2s</div>
+                                <div class="ruler-mark" style="left: 50%;">4s</div>
+                                <div class="ruler-mark" style="left: 70%;">6s</div>
+                                <div class="ruler-mark" style="left: 90%;">8s</div>
+                            </div>
+                            <div class="timeline-track">
+                                <div class="timeline-event" style="left: 20%;">
+                                    <div class="event-marker"></div>
+                                </div>
+                                <div class="timeline-event" style="left: 60%;">
+                                    <div class="event-marker"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settingsTab" class="tab-content">
+                    <div class="settings-panel">
+                        <h3>Level Settings</h3>
+                        <div class="setting-group">
+                            <label for="tileSize">Tile Size:</label>
+                            <input type="number" id="tileSize" value="32" min="8" max="128" step="8">
+                        </div>
+                        <div class="setting-group">
+                            <label for="gravity">Gravity:</label>
+                            <input type="number" id="gravity" value="9.8" min="0" max="50" step="0.1">
+                        </div>
+                        <div class="setting-group">
+                            <label for="maxVelocity">Max Velocity:</label>
+                            <input type="number" id="maxVelocity" value="2000" min="100" max="10000" step="100">
+                        </div>
+                        <div class="setting-group">
+                            <label for="levelWidth">Level Width:</label>
+                            <input type="number" id="levelWidth" value="800" min="100" max="5000" step="32">
+                        </div>
+                        <div class="setting-group">
+                            <label for="levelHeight">Level Height:</label>
+                            <input type="number" id="levelHeight" value="600" min="100" max="5000" step="32">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="editor-footer">
+            <div class="status-left">
+                <span id="statusText">Ready</span>
+            </div>
+            <div class="status-center">
+                <span id="objectCount">Objects: 0</span>
+                <span id="triggerCount">Triggers: 0</span>
+                <span id="scriptCount">Scripts: 0</span>
+            </div>
+            <div class="status-right">
+                <span id="fps">FPS: 60</span>
+                <span id="memory">Memory: 0MB</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Playtest Overlay -->
+    <div id="playtestOverlay" class="playtest-overlay" style="display: none;">
+        <div class="playtest-header">
+            <h3 style="color: #4CAF50; margin: 0;">Playtest Mode</h3>
+            <button class="tool-button" id="closePlaytest">Close</button>
+        </div>
+        <div class="playtest-content">
+            <iframe id="playtestFrame" class="playtest-iframe" width="800" height="600"></iframe>
+        </div>
+    </div>
+
+    <!-- Hidden file input for import -->
+    <input type="file" id="importFile" accept=".json,.ptspack" style="display: none;">
+
+    <!-- Scripts -->
+    <script type="module" src="dist/editor/EditorMain.js"></script>
+</body>
+</html> 

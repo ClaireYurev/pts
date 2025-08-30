@@ -104,7 +104,10 @@ export class CheatManager {
         if (!this.listeners.has(flag)) {
             this.listeners.set(flag, new Set());
         }
-        this.listeners.get(flag).add(callback);
+        const flagListeners = this.listeners.get(flag);
+        if (flagListeners) {
+            flagListeners.add(callback);
+        }
     }
     /**
      * Remove a listener

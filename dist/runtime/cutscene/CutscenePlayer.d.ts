@@ -1,41 +1,70 @@
-import { Cutscene, CutsceneItem } from '../../editor/CutsceneEditor.js';
+import { GameEngine } from '../../engine/GameEngine';
+import { Entity } from '../../engine/Entity';
+export interface CutsceneItem {
+    id: string;
+    time: number;
+    track: string;
+    action: string;
+    args: Record<string, any>;
+    duration?: number;
+}
+export interface CutsceneTrack {
+    id: string;
+    name: string;
+    type: 'camera' | 'text' | 'sprite' | 'music' | 'wait';
+    color: string;
+    items: CutsceneItem[];
+}
+export interface CutsceneData {
+    id: string;
+    name: string;
+    duration: number;
+    tracks: CutsceneTrack[];
+    metadata: {
+        created: string;
+        editor: string;
+        description?: string;
+    };
+}
 export interface CutsceneContext {
-    engine: any;
-    currentTime: number;
+    engine: GameEngine;
+    camera: {
+        x: number;
+        y: number;
+        zoom: number;
+    };
+    entities: Map<string, Entity>;
     variables: Record<string, any>;
 }
-export interface CutsceneAction {
-    name: string;
-    execute: (context: CutsceneContext, item: CutsceneItem) => Promise<void>;
+export interface CutsceneActionHandler {
+    execute: (item: CutsceneItem, context: CutsceneContext) => void | Promise<void>;
+    validate?: (item: CutsceneItem) => string | null;
 }
 export declare class CutscenePlayer {
-    private cutscenes;
-    private activeCutscene;
     private actionHandlers;
-    private engine;
     private isPlaying;
-    constructor(engine: any);
-    private initializeActionHandlers;
-    registerAction(action: CutsceneAction): void;
-    loadCutscene(cutscene: Cutscene): void;
-    loadCutscenes(cutscenes: Cutscene[]): void;
-    playCutscene(cutsceneId: string): Promise<void>;
-    stopCutscene(): Promise<void>;
-    pauseCutscene(): void;
-    resumeCutscene(): void;
-    skipCutscene(): void;
-    private executeCutscene;
+    private startTime;
+    private currentTime;
+    private executedItems;
+    private context;
+    private cutscene;
+    private onComplete?;
+    private onUpdate?;
+    constructor(cutscene: CutsceneData, engine: GameEngine, onComplete?: () => void, onUpdate?: (time: number) => void);
+    private registerDefaultHandlers;
+    private easeInOutQuad;
+    registerHandler(trackType: string, action: string, handler: CutsceneActionHandler): void;
+    play(): void;
+    pause(): void;
+    stop(): void;
+    seek(time: number): void;
+    private update;
     private executeItem;
-    private wait;
-    private waitForInput;
-    isPlayingCutscene(): boolean;
-    getCurrentCutscene(): Cutscene | null;
-    getCutsceneProgress(): number;
-    getCutscene(cutsceneId: string): Cutscene | undefined;
-    getAllCutscenes(): Cutscene[];
-    removeCutscene(cutsceneId: string): boolean;
-    clearCutscenes(): void;
-    exportCutscene(cutsceneId: string): string;
-    importCutscene(json: string): void;
+    private complete;
+    private cleanup;
+    getCurrentTime(): number;
+    getDuration(): number;
+    isPlayingState(): boolean;
+    getContext(): CutsceneContext;
 }
 //# sourceMappingURL=CutscenePlayer.d.ts.map

@@ -1,22 +1,36 @@
-import { GamePack, LevelData } from './EditorApp.js';
-import { ECAGraph } from './VisualScriptEditor.js';
-import { Cutscene } from './CutsceneEditor.js';
+import { GamePack } from '../engine/GamePack';
+import { ECAScript } from '../runtime/scripting/ECA';
+import { CutsceneData } from '../runtime/cutscene/CutscenePlayer';
+export interface ExportOptions {
+    includeAssets: boolean;
+    includeScripts: boolean;
+    includeCutscenes: boolean;
+    includeLevels: boolean;
+    validateSchema: boolean;
+    compress: boolean;
+}
+export interface ExportResult {
+    success: boolean;
+    filename?: string;
+    errors?: string[];
+    warnings?: string[];
+    size?: number;
+}
 export declare class ExportManager {
+    private ajv;
+    private validators;
     constructor();
-    exportLevel(level: LevelData): void;
-    exportPack(gamePack: GamePack): void;
-    exportPackAsZip(gamePack: GamePack, scripts?: ECAGraph[], cutscenes?: Cutscene[], assets?: Map<string, Blob>): Promise<void>;
-    exportPackAsZipWithJSZip(gamePack: GamePack, scripts?: ECAGraph[], cutscenes?: Cutscene[], assets?: Map<string, Blob>): Promise<void>;
-    exportToClipboard(data: any): void;
-    exportLevelToClipboard(level: LevelData): void;
-    exportPackToClipboard(gamePack: GamePack): void;
-    validateLevel(level: LevelData): string[];
-    validateGamePack(gamePack: GamePack): string[];
-    validateScript(script: ECAGraph): string[];
-    validateCutscene(cutscene: Cutscene): string[];
-    createGamePack(id: string, name: string, version: string, levels: LevelData[], metadata?: Record<string, any>): GamePack;
-    getExportFormats(): string[];
-    getExportFormatDescription(format: string): string;
-    getExportFormatExtension(format: string): string;
+    private initializeValidators;
+    exportGamePack(gamePack: GamePack, options?: ExportOptions): Promise<ExportResult>;
+    importGamePack(file: File): Promise<{
+        success: boolean;
+        gamePack?: GamePack;
+        errors?: string[];
+    }>;
+    private blobToBase64;
+    private downloadFile;
+    validateScript(script: ECAScript): string[];
+    validateCutscene(cutscene: CutsceneData): string[];
+    getSchemaErrors(schemaType: string, data: any): string[];
 }
 //# sourceMappingURL=ExportManager.d.ts.map

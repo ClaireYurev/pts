@@ -29,7 +29,20 @@ export declare class InputMap {
     private wasOnGround;
     private actionHeld;
     private ledgeGrabActive;
+    private static readonly PRESETS;
     constructor(initialProfile?: Partial<InputProfile>);
+    /**
+     * Load a preset configuration
+     */
+    loadPreset(presetName: string): boolean;
+    /**
+     * Get available preset names
+     */
+    getAvailablePresets(): string[];
+    /**
+     * Get preset configuration
+     */
+    getPreset(presetName: string): Partial<InputProfile> | null;
     /**
      * Check if an action is currently pressed
      */

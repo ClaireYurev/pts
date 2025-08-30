@@ -28,6 +28,9 @@ export declare class PiMenu {
     setDevTools(cheatManager: CheatManager, freeCamera: FreeCamera, debugOverlay: DebugOverlay, engine: GameEngine): void;
     setSaveSystem(saveSystem: SaveSystem): void;
     setLibraryManager(libraryManager: LibraryManager): void;
+    private updateLibraryDisplay;
+    private updatePacksList;
+    private createPackElement;
     private createOverlay;
     private createPiButton;
     private createMainMenu;
@@ -39,6 +42,10 @@ export declare class PiMenu {
     private setupSaveMenuEvents;
     private setupSettingsMenuEvents;
     private setupLibraryMenuEvents;
+    private setupPackActionHandlers;
+    private handlePackPlay;
+    private handlePackInstall;
+    private handlePackRemove;
     private setupDevMenuEvents;
     private handleSaveAction;
     private performSave;
@@ -83,10 +90,7 @@ export declare class PiMenu {
     private handleLoadFromUrl;
     private handleClearCache;
     private handleLocalFileLoad;
-    private updateLibraryDisplay;
-    private createPackElement;
     private handlePackLoad;
-    private handlePackRemove;
     private setupControlsEvents;
     private startRebinding;
     private cancelRebinding;
@@ -96,5 +100,6 @@ export declare class PiMenu {
     private resetKeyboardBindings;
     private resetGamepadBindings;
     private updateGamepadStatus;
+    private updateDevMenu;
 }
 //# sourceMappingURL=PiMenu.d.ts.map

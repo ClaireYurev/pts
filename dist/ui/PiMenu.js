@@ -30,6 +30,60 @@ export class PiMenu {
     }
     setLibraryManager(libraryManager) {
         this.libraryManager = libraryManager;
+        this.updateLibraryDisplay();
+    }
+    async updateLibraryDisplay() {
+        if (!this.libraryManager)
+            return;
+        try {
+            const allPacks = await this.libraryManager.getAllPacks();
+            // Update built-in packs
+            const builtinPacks = allPacks.filter(item => item.isBuiltIn);
+            this.updatePacksList('builtinPacksList', builtinPacks);
+            // Update installed packs
+            const installedPacks = allPacks.filter(item => !item.isBuiltIn && item.isInstalled);
+            this.updatePacksList('installedPacksList', installedPacks);
+            // Update local packs (URL and file packs)
+            const localPacks = allPacks.filter(item => !item.isBuiltIn && !item.isInstalled);
+            this.updatePacksList('localPacksList', localPacks);
+        }
+        catch (error) {
+            console.error('Failed to update library display:', error);
+        }
+    }
+    updatePacksList(containerId, items) {
+        const container = document.getElementById(containerId);
+        if (!container)
+            return;
+        if (items.length === 0) {
+            container.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No packs available</div>';
+            return;
+        }
+        container.innerHTML = items.map(item => this.createPackElement(item)).join('');
+    }
+    createPackElement(item) {
+        const pack = item.pack;
+        const thumbnail = pack.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+';
+        return `
+            <div class="pack-item" data-pack-id="${pack.id}">
+                <div class="pack-thumbnail">
+                    <img src="${thumbnail}" alt="${pack.name}" style="width: 100%; height: 90px; object-fit: cover; border-radius: 4px;">
+                </div>
+                <div class="pack-info">
+                    <div class="pack-title">${pack.name}</div>
+                    <div class="pack-description">${pack.description}</div>
+                    <div class="pack-meta">
+                        <span class="pack-author">by ${pack.author}</span>
+                        <span class="pack-version">v${pack.version}</span>
+                    </div>
+                </div>
+                <div class="pack-actions">
+                    <button class="pack-play-btn" data-pack-id="${pack.id}">Play</button>
+                    ${item.canInstall ? `<button class="pack-install-btn" data-pack-id="${pack.id}">Install</button>` : ''}
+                    ${!item.isBuiltIn ? `<button class="pack-remove-btn" data-pack-id="${pack.id}">Remove</button>` : ''}
+                </div>
+            </div>
+        `;
     }
     createOverlay() {
         this.overlay = document.createElement("div");
@@ -279,6 +333,16 @@ export class PiMenu {
                     
                     <div id="keyboardControls" class="controls-panel active">
                         <h4 style="color: #FFF; margin-top: 0;">Keyboard Bindings</h4>
+                        
+                        <div style="margin-bottom: 15px; text-align: center;">
+                            <label style="color: #CCC; display: block; margin-bottom: 5px;">Preset Configuration:</label>
+                            <select id="keyboardPreset" style="width: 150px; padding: 8px; background: #333; color: #FFF; border: 1px solid #666; border-radius: 4px;">
+                                <option value="custom">Custom</option>
+                                <option value="classic">Classic (Arrow Keys)</option>
+                                <option value="wasd">WASD</option>
+                            </select>
+                        </div>
+                        
                         <div style="text-align: left; color: #CCC;">
                             <div class="binding-row">
                                 <span class="binding-label">Move Left:</span>
@@ -675,7 +739,7 @@ export class PiMenu {
         document.querySelectorAll("#saveMenu .save-action-btn").forEach(btn => {
             const actionHandler = (e) => {
                 e.stopPropagation();
-                const slot = Number(btn.dataset.slot);
+                const slot = Number(btn.dataset.slot) - 1; // Convert to 0-based index
                 const action = btn.classList.contains('save-btn') ? 'save' :
                     btn.classList.contains('load-btn') ? 'load' : 'overwrite';
                 this.handleSaveAction(slot, action);
@@ -794,6 +858,82 @@ export class PiMenu {
             localFileInput.addEventListener('change', fileHandler, { signal: this.abortController.signal });
             this.eventListeners.push({ element: localFileInput, type: 'change', listener: fileHandler });
         }
+        // Pack action handlers
+        this.setupPackActionHandlers();
+    }
+    setupPackActionHandlers() {
+        // Delegate event handling for pack actions
+        const libraryContent = document.getElementById('libraryContent');
+        if (libraryContent) {
+            const actionHandler = (e) => {
+                const target = e.target;
+                const packId = target.getAttribute('data-pack-id');
+                if (!packId)
+                    return;
+                if (target.classList.contains('pack-play-btn')) {
+                    this.handlePackPlay(packId);
+                }
+                else if (target.classList.contains('pack-install-btn')) {
+                    this.handlePackInstall(packId);
+                }
+                else if (target.classList.contains('pack-remove-btn')) {
+                    this.handlePackRemove(packId);
+                }
+            };
+            libraryContent.addEventListener('click', actionHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: libraryContent, type: 'click', listener: actionHandler });
+        }
+    }
+    async handlePackPlay(packId) {
+        if (!this.libraryManager)
+            return;
+        try {
+            const success = await this.libraryManager.switchPack(packId);
+            if (success) {
+                this.close();
+                // The engine should handle the pack switch
+            }
+            else {
+                alert('Failed to switch to pack. Please try again.');
+            }
+        }
+        catch (error) {
+            console.error('Failed to play pack:', error);
+            alert('Failed to load pack. Please check the pack files.');
+        }
+    }
+    async handlePackInstall(packId) {
+        if (!this.libraryManager)
+            return;
+        try {
+            const result = await this.libraryManager.installPack(packId);
+            if (result.success) {
+                alert(`Pack installed successfully! Size: ${(result.size || 0) / 1024 / 1024} MB`);
+                await this.updateLibraryDisplay();
+            }
+            else {
+                alert(`Failed to install pack: ${result.error}`);
+            }
+        }
+        catch (error) {
+            console.error('Failed to install pack:', error);
+            alert('Failed to install pack. Please try again.');
+        }
+    }
+    async handlePackRemove(packId) {
+        if (!this.libraryManager)
+            return;
+        if (confirm('Are you sure you want to remove this pack?')) {
+            try {
+                await this.libraryManager.removePack(packId);
+                alert('Pack removed successfully');
+                this.updateLibraryDisplay();
+            }
+            catch (error) {
+                console.error('Failed to remove pack:', error);
+                alert('Failed to remove pack. Please try again.');
+            }
+        }
     }
     setupDevMenuEvents() {
         // Resume Game button
@@ -910,13 +1050,13 @@ export class PiMenu {
         }
         try {
             // Load from IndexedDB
-            const saveData = await this.saveSystem.load(slot);
-            if (!saveData) {
+            const result = await this.saveSystem.load(slot);
+            if (!result.success || !result.saveData) {
                 console.error(`No save data found in slot ${slot}`);
                 return;
             }
             // Restore game state
-            await this.restoreGameState(saveData);
+            await this.restoreGameState(result.saveData);
             // Close menu and resume game
             this.close();
             console.log(`Game loaded from slot ${slot}`);
@@ -942,26 +1082,29 @@ export class PiMenu {
             inventoryRecord[item] = (inventoryRecord[item] || 0) + 1;
         });
         return {
+            version: '1.0',
+            level: 1,
+            room: 1,
             player: {
-                x: player.position.x,
-                y: player.position.y,
-                state: 'idle', // Default state since Entity doesn't have state
-                facing: 'R', // Default facing since Entity doesn't have facing
+                position: { x: player.position.x, y: player.position.y },
+                velocity: { x: player.velocity.x, y: player.velocity.y },
                 health: player.health,
-                maxHealth: 100, // Default max health
+                maxHealth: 100,
                 hasSword: player.hasItem('sword'),
+                isOnGround: true,
+                facingDirection: 'right',
+                animationState: 'idle',
+                invulnerable: false,
+                invulnerabilityTimer: 0,
                 inventory: inventoryRecord
             },
-            world: {
-                timerSecRemaining: 300, // TODO: Get from game state
-                flags: {}, // TODO: Get from game state
-                looseTilesGone: [], // TODO: Get from game state
-                enemies: [] // TODO: Get from game state
-            },
-            scripting: {
-                variables: {}, // TODO: Get from game state
-                completedEvents: [] // TODO: Get from game state
-            }
+            timer: 0,
+            flags: {},
+            rngSeed: Math.floor(Math.random() * 1000000),
+            enemies: [],
+            thumbnail: '',
+            packId: 'default',
+            packVersion: '1.0.0'
         };
     }
     async restoreGameState(saveData) {
@@ -975,12 +1118,13 @@ export class PiMenu {
             throw new Error('Player entity not found');
         }
         // Restore player state
-        player.position.x = saveData.player.x;
-        player.position.y = saveData.player.y;
+        player.position.x = saveData.player.position.x;
+        player.position.y = saveData.player.position.y;
         player.health = saveData.player.health;
         // Convert inventory record back to array
         const inventoryArray = [];
-        Object.entries(saveData.player.inventory).forEach(([item, count]) => {
+        const inventory = saveData.player.inventory || {};
+        Object.entries(inventory).forEach(([item, count]) => {
             for (let i = 0; i < count; i++) {
                 inventoryArray.push(item);
             }
@@ -994,11 +1138,11 @@ export class PiMenu {
             return;
         }
         try {
-            const saves = await this.saveSystem.list();
+            const saveSlots = await this.saveSystem.listSaves();
             for (let i = 0; i < 3; i++) {
-                const slot = (i + 1);
-                const save = saves[i];
-                const slotElement = document.querySelector(`[data-slot="${slot}"]`);
+                const slot = i;
+                const saveSlot = saveSlots[i];
+                const slotElement = document.querySelector(`[data-slot="${slot + 1}"]`);
                 if (!slotElement)
                     continue;
                 const statusElement = slotElement.querySelector('.save-status');
@@ -1007,9 +1151,10 @@ export class PiMenu {
                 const saveBtn = slotElement.querySelector('.save-btn');
                 const loadBtn = slotElement.querySelector('.load-btn');
                 const overwriteBtn = slotElement.querySelector('.overwrite-btn');
-                if (save) {
+                if (saveSlot && !saveSlot.isEmpty && saveSlot.saveData) {
                     // Slot has save data
-                    statusElement.textContent = `Level ${save.levelIndex}`;
+                    const save = saveSlot.saveData;
+                    statusElement.textContent = `Level ${save.level}`;
                     timeElement.textContent = new Date(save.timestamp).toLocaleString();
                     if (save.thumbnail) {
                         thumbnailElement.src = save.thumbnail;
@@ -1947,12 +2092,27 @@ export class PiMenu {
         if (selectedTab)
             selectedTab.classList.add('active');
         // Update display for the selected panel
-        this.updateLibraryDisplay(panelId);
+        this.updateLibraryDisplay();
     }
     async handleLoadFromUrl() {
+        // Security check: Rate limit URL loads
+        const rateLimitCheck = window.ptsCore?.securityManager?.checkRateLimit('urlLoad', 'user');
+        if (rateLimitCheck && !rateLimitCheck.allowed) {
+            alert(`Too many URL loads. Please wait ${Math.ceil((rateLimitCheck.resetTime - Date.now()) / 1000)} seconds.`);
+            return;
+        }
         const url = prompt('Enter the URL of a .ptspack.json file:');
         if (!url)
             return;
+        // Security check: Validate URL
+        const securityManager = window.ptsCore?.securityManager;
+        if (securityManager) {
+            const urlValidation = securityManager.validateUrl(url);
+            if (!urlValidation.valid) {
+                alert(`URL validation failed: ${urlValidation.error}`);
+                return;
+            }
+        }
         if (!url.startsWith('https://')) {
             alert('Only HTTPS URLs are allowed for security reasons.');
             return;
@@ -1963,7 +2123,7 @@ export class PiMenu {
                 return;
             }
             await this.libraryManager.loadPackFromUrl(url);
-            this.updateLibraryDisplay('installed-panel');
+            this.updateLibraryDisplay();
             alert('Pack loaded successfully!');
         }
         catch (error) {
@@ -1979,7 +2139,7 @@ export class PiMenu {
             if (this.libraryManager) {
                 await this.libraryManager.clearCache();
             }
-            this.updateLibraryDisplay('installed-panel');
+            this.updateLibraryDisplay();
             alert('Cache cleared successfully!');
         }
         catch (error) {
@@ -1988,12 +2148,29 @@ export class PiMenu {
         }
     }
     async handleLocalFileLoad(event) {
+        // Security check: Rate limit file uploads
+        const rateLimitCheck = window.ptsCore?.securityManager?.checkRateLimit('fileUpload', 'user');
+        if (rateLimitCheck && !rateLimitCheck.allowed) {
+            alert(`Too many file uploads. Please wait ${Math.ceil((rateLimitCheck.resetTime - Date.now()) / 1000)} seconds.`);
+            return;
+        }
         const input = event.target;
         const file = input.files?.[0];
         if (!file)
             return;
+        // Security check: Validate file
+        const securityManager = window.ptsCore?.securityManager;
+        if (securityManager) {
+            const fileValidation = securityManager.validateFileUpload(file);
+            if (!fileValidation.valid) {
+                alert(`File validation failed: ${fileValidation.error}`);
+                input.value = '';
+                return;
+            }
+        }
         if (!file.name.endsWith('.ptspack.json')) {
             alert('Please select a .ptspack.json file.');
+            input.value = '';
             return;
         }
         try {
@@ -2002,7 +2179,7 @@ export class PiMenu {
                 return;
             }
             await this.libraryManager.loadPackFromFile(file);
-            this.updateLibraryDisplay('local-panel');
+            this.updateLibraryDisplay();
             alert('Local pack loaded successfully!');
         }
         catch (error) {
@@ -2012,81 +2189,6 @@ export class PiMenu {
         // Clear the input
         input.value = '';
     }
-    async updateLibraryDisplay(panelId) {
-        if (!this.libraryManager)
-            return;
-        const items = await this.libraryManager.getLibraryItems();
-        const currentPack = await this.libraryManager.getCurrentPack();
-        // Update built-in packs
-        if (panelId === 'builtin-panel') {
-            const builtinList = this.overlay.querySelector('#builtinPacksList');
-            if (builtinList) {
-                builtinList.innerHTML = '';
-                const builtinItems = items.filter(item => item.source === 'builtin');
-                builtinItems.forEach(item => {
-                    const packElement = this.createPackElement(item, currentPack);
-                    builtinList.appendChild(packElement);
-                });
-            }
-        }
-        // Update installed packs
-        if (panelId === 'installed-panel') {
-            const installedList = this.overlay.querySelector('#installedPacksList');
-            if (installedList) {
-                installedList.innerHTML = '';
-                const installedItems = items.filter(item => item.source === 'url');
-                installedItems.forEach(item => {
-                    const packElement = this.createPackElement(item, currentPack);
-                    installedList.appendChild(packElement);
-                });
-            }
-        }
-        // Update local packs
-        if (panelId === 'local-panel') {
-            const localList = this.overlay.querySelector('#localPacksList');
-            if (localList) {
-                localList.innerHTML = '';
-                const localItems = items.filter(item => item.source === 'local');
-                localItems.forEach(item => {
-                    const packElement = this.createPackElement(item, currentPack);
-                    localList.appendChild(packElement);
-                });
-            }
-        }
-    }
-    createPackElement(item, currentPack) {
-        const packDiv = document.createElement('div');
-        packDiv.className = 'pack-item';
-        packDiv.innerHTML = `
-          <div class="pack-cover">
-            <img src="${item.cover || 'assets/default-cover.png'}" alt="${item.name}" onerror="this.src='assets/default-cover.png'">
-          </div>
-          <div class="pack-info">
-            <h3>${item.name}</h3>
-            <p>${item.description || ''}</p>
-            <div class="pack-meta">
-              <span>${item.pack?.version || '1.0'}</span>
-              <span>by ${item.pack?.author || 'Unknown'}</span>
-            </div>
-          </div>
-          <div class="pack-actions">
-            ${currentPack?.id === item.id ?
-            '<span class="current-pack">Current</span>' :
-            '<button class="load-pack-btn" data-pack-id="' + item.id + '">Load</button>'}
-            ${item.source === 'url' ? '<button class="remove-pack-btn" data-pack-id="' + item.id + '">Remove</button>' : ''}
-          </div>
-        `;
-        // Add event listeners
-        const loadBtn = packDiv.querySelector('.load-pack-btn');
-        if (loadBtn) {
-            loadBtn.addEventListener('click', () => this.handlePackLoad(item.id));
-        }
-        const removeBtn = packDiv.querySelector('.remove-pack-btn');
-        if (removeBtn) {
-            removeBtn.addEventListener('click', () => this.handlePackRemove(item.id));
-        }
-        return packDiv;
-    }
     async handlePackLoad(packId) {
         try {
             if (!this.libraryManager) {
@@ -2094,30 +2196,12 @@ export class PiMenu {
                 return;
             }
             await this.libraryManager.switchPack(packId);
-            this.close();
-            alert('Pack loaded successfully!');
+            alert(`Switched to pack: ${packId}`);
+            this.updateLibraryDisplay();
         }
         catch (error) {
             console.error('Failed to load pack:', error);
-            alert(`Failed to load pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-    }
-    async handlePackRemove(packId) {
-        if (!confirm('Remove this pack from your library?')) {
-            return;
-        }
-        try {
-            if (!this.libraryManager) {
-                alert('Library manager not available.');
-                return;
-            }
-            await this.libraryManager.removePack(packId);
-            this.updateLibraryDisplay('installed-panel');
-            alert('Pack removed successfully!');
-        }
-        catch (error) {
-            console.error('Failed to remove pack:', error);
-            alert(`Failed to remove pack: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            alert('Failed to load pack. Please try again.');
         }
     }
     setupControlsEvents() {
@@ -2163,6 +2247,25 @@ export class PiMenu {
                 this.eventListeners.push({ element: btn, type: 'click', listener: bindingHandler });
             }
         });
+        // Keyboard preset selection
+        const keyboardPreset = document.getElementById('keyboardPreset');
+        if (keyboardPreset) {
+            const presetHandler = () => {
+                const selectedPreset = keyboardPreset.value;
+                if (selectedPreset !== 'custom' && this.engine?.getInputMap) {
+                    const success = this.engine.getInputMap().loadPreset(selectedPreset);
+                    if (success) {
+                        this.updateBindingDisplay();
+                        console.log(`Loaded keyboard preset: ${selectedPreset}`);
+                    }
+                    else {
+                        console.warn(`Failed to load preset: ${selectedPreset}`);
+                    }
+                }
+            };
+            keyboardPreset.addEventListener('change', presetHandler, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: keyboardPreset, type: 'change', listener: presetHandler });
+        }
         // Reset buttons
         const resetKeyboardBtn = document.getElementById('resetKeyboardBtn');
         if (resetKeyboardBtn) {
@@ -2249,22 +2352,17 @@ export class PiMenu {
             console.warn('InputMap not available for rebinding');
             return;
         }
-        const overlay = document.getElementById('rebindingOverlay');
-        const actionName = document.getElementById('rebindingActionName');
-        if (overlay && actionName) {
-            actionName.textContent = `${action} (${device})`;
-            overlay.style.display = 'flex';
-            // Start rebinding process
-            this.engine.getInputMap().startRebind(action, device)
-                .then(() => {
-                console.log(`Successfully rebound ${action} for ${device}`);
-                this.updateBindingDisplay();
-                overlay.style.display = 'none';
-            })
-                .catch((error) => {
-                console.error(`Failed to rebind ${action}:`, error);
-                overlay.style.display = 'none';
-            });
+        try {
+            // Validate action is a valid input action
+            const validActions = ['Left', 'Right', 'Up', 'Down', 'Jump', 'Action', 'Block', 'Pause'];
+            if (!validActions.includes(action)) {
+                console.warn(`Invalid action for rebinding: ${action}`);
+                return;
+            }
+            this.engine.getInputMap().startRebind(action, device);
+        }
+        catch (error) {
+            console.error(`Failed to rebind ${action}:`, error);
         }
     }
     cancelRebinding() {
@@ -2373,6 +2471,40 @@ export class PiMenu {
             statusElement.textContent = 'Not Available';
             statusElement.style.color = '#666';
         }
+    }
+    updateDevMenu() {
+        if (!this.cheatManager || !this.debugOverlay || !this.freeCamera) {
+            console.warn('Dev tools not available for menu update');
+            return;
+        }
+        const elements = {
+            god: document.getElementById('devGod'),
+            noclip: document.getElementById('devNoclip'),
+            infTime: document.getElementById('devInfTime'),
+            giveSword: document.getElementById('devGiveSword'),
+            health: document.getElementById('devHealth'),
+            debugOverlay: document.getElementById('devDebugOverlay'),
+            freeCamera: document.getElementById('devFreeCamera')
+        };
+        // Check for missing elements
+        const missingElements = Object.entries(elements)
+            .filter(([key, element]) => !element)
+            .map(([key]) => key);
+        if (missingElements.length > 0) {
+            console.warn(`Missing dev checkbox elements: ${missingElements.join(', ')}`);
+            return;
+        }
+        // Update cheat checkboxes
+        elements.god.checked = this.cheatManager.on(CheatFlag.God);
+        elements.noclip.checked = this.cheatManager.on(CheatFlag.Noclip);
+        elements.infTime.checked = this.cheatManager.on(CheatFlag.InfTime);
+        elements.giveSword.checked = this.cheatManager.on(CheatFlag.GiveSword);
+        // Update health input
+        const healthValue = this.cheatManager.getHealthOverride() ?? 100;
+        elements.health.value = healthValue.toString();
+        // Update dev tool checkboxes
+        elements.debugOverlay.checked = this.debugOverlay.isEnabled();
+        elements.freeCamera.checked = this.freeCamera.isEnabled();
     }
 }
 //# sourceMappingURL=PiMenu.js.map

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PiMenu Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .status {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        button {
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5a5a5a;
+        }
+        .game-canvas {
+            border: 2px solid #4a4a4a;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>PiMenu Integration Test</h1>
+        
+        <div class="test-section">
+            <h2>Game Engine Status</h2>
+            <div class="status" id="engine-status">
+                Initializing...
+            </div>
+            <button id="start-engine">Start Engine</button>
+            <button id="stop-engine">Stop Engine</button>
+            <button id="toggle-pause">Toggle Pause</button>
+        </div>
+
+        <div class="test-section">
+            <h2>PiMenu Controls</h2>
+            <p>Look for the π button in the bottom-right corner, or press ESC to open the menu.</p>
+            <button id="open-menu">Open PiMenu</button>
+            <button id="close-menu">Close PiMenu</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Game Canvas</h2>
+            <canvas id="gameCanvas" class="game-canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="test-section">
+            <h2>Settings Status</h2>
+            <div class="status" id="settings-status">
+                Loading settings...
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GameEngine } from './src/engine/GameEngine.js';
+        import { SettingsStore } from './src/engine/SettingsStore.js';
+
+        let engine = null;
+        let settingsStore = null;
+
+        // DOM elements
+        const engineStatus = document.getElementById('engine-status');
+        const settingsStatus = document.getElementById('settings-status');
+        const startEngineBtn = document.getElementById('start-engine');
+        const stopEngineBtn = document.getElementById('stop-engine');
+        const togglePauseBtn = document.getElementById('toggle-pause');
+        const openMenuBtn = document.getElementById('open-menu');
+        const closeMenuBtn = document.getElementById('close-menu');
+        const gameCanvas = document.getElementById('gameCanvas');
+
+        // Initialize
+        async function initialize() {
+            try {
+                engineStatus.textContent = 'Creating game engine...';
+                
+                // Create game engine
+                engine = new GameEngine(gameCanvas);
+                settingsStore = engine.getSettingsStore();
+                
+                engineStatus.textContent = 'Game engine created successfully';
+                
+                // Update settings display
+                updateSettingsDisplay();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                console.log('PiMenu test initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+                engineStatus.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function setupEventListeners() {
+            startEngineBtn.addEventListener('click', () => {
+                if (engine) {
+                    engine.start();
+                    engineStatus.textContent = 'Engine started';
+                }
+            });
+
+            stopEngineBtn.addEventListener('click', () => {
+                if (engine) {
+                    engine.stop();
+                    engineStatus.textContent = 'Engine stopped';
+                }
+            });
+
+            togglePauseBtn.addEventListener('click', () => {
+                if (engine) {
+                    engine.getPauseManager().toggle();
+                    const isPaused = engine.getPauseManager().getPausedState();
+                    engineStatus.textContent = `Engine ${isPaused ? 'paused' : 'resumed'}`;
+                }
+            });
+
+            openMenuBtn.addEventListener('click', () => {
+                if (engine && engine.piMenu) {
+                    engine.piMenu.open();
+                }
+            });
+
+            closeMenuBtn.addEventListener('click', () => {
+                if (engine && engine.piMenu) {
+                    engine.piMenu.close();
+                }
+            });
+
+            // Settings change listeners
+            if (settingsStore) {
+                settingsStore.addListener('audio.master', updateSettingsDisplay);
+                settingsStore.addListener('video.scaleMode', updateSettingsDisplay);
+                settingsStore.addListener('input.profile', updateSettingsDisplay);
+            }
+        }
+
+        function updateSettingsDisplay() {
+            if (!settingsStore) return;
+
+            const audioSettings = settingsStore.getAudioSettings();
+            const videoSettings = settingsStore.getVideoSettings();
+            const inputSettings = settingsStore.getInputSettings();
+            const accessibilitySettings = settingsStore.getAccessibilitySettings();
+
+            settingsStatus.innerHTML = `
+                <strong>Audio:</strong> Master: ${Math.round(audioSettings.master * 100)}%, 
+                Music: ${Math.round(audioSettings.music * 100)}%, 
+                SFX: ${Math.round(audioSettings.sfx * 100)}%, 
+                Muted: ${audioSettings.muted ? 'Yes' : 'No'}<br>
+                <strong>Video:</strong> Scale: ${videoSettings.scaleMode}, 
+                Safe Area: ${Math.round(videoSettings.safeAreaPct * 100)}%, 
+                FPS Cap: ${videoSettings.fpsCap || 'None'}<br>
+                <strong>Input:</strong> Profile: ${inputSettings.profile}, 
+                Deadzone: ${Math.round(inputSettings.deadzonePct * 100)}%<br>
+                <strong>Accessibility:</strong> High Contrast: ${accessibilitySettings.highContrast ? 'Yes' : 'No'}, 
+                Late Jump: ${accessibilitySettings.lateJumpMs}ms
+            `;
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', initialize);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (engine) {
+                engine.getRenderer().resizeToWindow();
+            }
+        });
+
+        // Handle visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (engine) {
+                    engine.getPauseManager().pause();
+                }
+            } else {
+                if (engine) {
+                    engine.getPauseManager().resume();
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

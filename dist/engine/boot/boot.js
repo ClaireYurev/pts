@@ -1,5 +1,5 @@
-import { parseBootConfig, validateBootConfig } from './BootConfig.js';
-import { CheatFlag } from '../../dev/CheatManager.js';
+import { CheatFlag } from "../../dev/CheatManager.js";
+import { parseBootConfig, validateBootConfig, resolveBootConfig } from "./BootConfig.js";
 export async function bootGame(context) {
     const { engine, settingsStore, libraryManager, saveSystem, audioManager, cheatManager } = context;
     const warnings = [];
@@ -14,12 +14,14 @@ export async function bootGame(context) {
         if (warnings.length > 0) {
             console.warn("Boot configuration warnings:", warnings);
         }
-        // Step 2: Resolve pack (built-in pack OR packUrl)
+        // Step 2: Load pack and get pack defaults
+        let packDefaults;
         let packLoaded = false;
         if (urlConfig.packUrl) {
             try {
                 console.log(`Loading external pack from: ${urlConfig.packUrl}`);
                 // TODO: Implement external pack loading via LibraryManager
+                // packDefaults = await libraryManager.loadPackDefaults(urlConfig.packUrl);
                 packLoaded = true;
             }
             catch (error) {
@@ -31,6 +33,7 @@ export async function bootGame(context) {
             try {
                 console.log(`Loading built-in pack: ${urlConfig.pack}`);
                 // TODO: Implement built-in pack loading via LibraryManager
+                // packDefaults = await libraryManager.loadPackDefaults(urlConfig.pack);
                 packLoaded = true;
             }
             catch (error) {
@@ -38,89 +41,70 @@ export async function bootGame(context) {
                 warnings.push(`Failed to load built-in pack: ${error}`);
             }
         }
-        // Step 3: Apply Settings overrides (video/audio/input)
-        console.log("Applying settings overrides...");
-        const settings = settingsStore.getAll();
-        // Apply video settings
-        if (urlConfig.scale) {
-            engine.getRenderer().setScaleMode(urlConfig.scale);
+        // Step 3: Resolve final configuration with proper precedence
+        console.log("Resolving boot configuration with precedence...");
+        const resolvedConfig = resolveBootConfig(urlConfig, packDefaults);
+        console.log("Resolved configuration:", resolvedConfig);
+        // Step 4: Apply video/display settings
+        console.log("Applying video settings...");
+        if (resolvedConfig.scale) {
+            engine.getRenderer().setScaleMode(resolvedConfig.scale);
         }
-        else if (settings.video.scaleMode) {
-            engine.getRenderer().setScaleMode(settings.video.scaleMode);
-        }
-        if (urlConfig.fullscreen !== undefined) {
-            if (urlConfig.fullscreen) {
-                engine.getRenderer().requestFullscreen().catch(console.error);
-            }
-        }
-        else if (settings.video.fullscreen) {
+        if (resolvedConfig.fullscreen) {
             engine.getRenderer().requestFullscreen().catch(console.error);
         }
-        if (urlConfig.fps) {
+        if (resolvedConfig.fps) {
             // TODO: Set FPS cap
-            console.log(`FPS cap set to: ${urlConfig.fps}`);
+            console.log(`FPS cap set to: ${resolvedConfig.fps}`);
         }
-        else if (settings.video.fpsCap) {
-            // TODO: Set FPS cap
-            console.log(`FPS cap set to: ${settings.video.fpsCap}`);
-        }
-        if (urlConfig.vsync !== undefined) {
+        if (resolvedConfig.vsync !== undefined) {
             // TODO: Set vsync
-            console.log(`VSync set to: ${urlConfig.vsync}`);
+            console.log(`VSync set to: ${resolvedConfig.vsync}`);
         }
-        else if (settings.video.vsync !== undefined) {
-            // TODO: Set vsync
-            console.log(`VSync set to: ${settings.video.vsync}`);
+        if (resolvedConfig.zoom) {
+            // TODO: Set zoom level
+            console.log(`Zoom level set to: ${resolvedConfig.zoom}x`);
         }
-        // Apply audio settings
-        if (urlConfig.mute !== undefined) {
-            audioManager.setMuted(urlConfig.mute);
+        // Step 5: Apply audio settings
+        console.log("Applying audio settings...");
+        if (resolvedConfig.mute !== undefined) {
+            audioManager.setMuted(resolvedConfig.mute);
         }
-        else if (settings.audio.muted) {
-            audioManager.setMuted(true);
+        if (resolvedConfig.vol !== undefined) {
+            audioManager.setMasterVolume(resolvedConfig.vol);
         }
-        if (urlConfig.vol !== undefined) {
-            audioManager.setMasterVolume(urlConfig.vol);
+        if (resolvedConfig.music !== undefined) {
+            audioManager.setMusicVolume(resolvedConfig.music ? 0.8 : 0);
         }
-        else {
-            audioManager.setMasterVolume(settings.audio.master);
+        if (resolvedConfig.sfx !== undefined) {
+            audioManager.setSfxVolume(resolvedConfig.sfx ? 0.9 : 0);
         }
-        if (urlConfig.music !== undefined) {
-            audioManager.setMusicVolume(urlConfig.music ? settings.audio.music : 0);
+        if (resolvedConfig.latency) {
+            audioManager.setLatencyMode(resolvedConfig.latency);
         }
-        else {
-            audioManager.setMusicVolume(settings.audio.music);
-        }
-        if (urlConfig.sfx !== undefined) {
-            audioManager.setSfxVolume(urlConfig.sfx ? settings.audio.sfx : 0);
-        }
-        else {
-            audioManager.setSfxVolume(settings.audio.sfx);
-        }
-        if (urlConfig.latency) {
-            audioManager.setLatencyHint(urlConfig.latency);
-        }
-        else {
-            audioManager.setLatencyHint(settings.audio.latency);
-        }
-        // Apply input settings
-        if (urlConfig.deadzone !== undefined) {
+        // Step 6: Apply input settings
+        console.log("Applying input settings...");
+        if (resolvedConfig.deadzone !== undefined) {
             // TODO: Set input deadzone
-            console.log(`Input deadzone set to: ${urlConfig.deadzone}`);
+            console.log(`Input deadzone set to: ${resolvedConfig.deadzone}`);
         }
-        if (urlConfig.jumpbuf !== undefined) {
+        if (resolvedConfig.jumpbuf !== undefined) {
             // TODO: Set jump buffer
-            console.log(`Jump buffer set to: ${urlConfig.jumpbuf}ms`);
+            console.log(`Jump buffer set to: ${resolvedConfig.jumpbuf}ms`);
         }
-        if (urlConfig.sticky !== undefined) {
+        if (resolvedConfig.sticky !== undefined) {
             // TODO: Set sticky input
-            console.log(`Sticky input set to: ${urlConfig.sticky}`);
+            console.log(`Sticky input set to: ${resolvedConfig.sticky}`);
         }
-        // Step 4: Handle save slot or set initial state
-        if (urlConfig.slot && urlConfig.slot !== 'Q') {
+        if (resolvedConfig.keys) {
+            // TODO: Set custom key bindings
+            console.log(`Custom keys set: ${resolvedConfig.keys}`);
+        }
+        // Step 7: Handle save slot or set initial state
+        if (resolvedConfig.slot && resolvedConfig.slot !== 'Q') {
             try {
-                console.log(`Loading save from slot: ${urlConfig.slot}`);
-                const saveData = await saveSystem.load(urlConfig.slot);
+                console.log(`Loading save from slot: ${resolvedConfig.slot}`);
+                const saveData = await saveSystem.load(resolvedConfig.slot);
                 if (saveData) {
                     // Restore save data
                     // TODO: Implement save restoration
@@ -128,68 +112,68 @@ export async function bootGame(context) {
                 }
                 else {
                     console.log("No save data found in slot, setting initial state");
-                    setInitialGameState(engine, urlConfig);
+                    setInitialGameState(engine, resolvedConfig);
                 }
             }
             catch (error) {
                 console.error("Failed to load save:", error);
-                warnings.push(`Failed to load save from slot ${urlConfig.slot}: ${error}`);
-                setInitialGameState(engine, urlConfig);
+                warnings.push(`Failed to load save from slot ${resolvedConfig.slot}: ${error}`);
+                setInitialGameState(engine, resolvedConfig);
             }
         }
         else {
             // Set initial game state
-            setInitialGameState(engine, urlConfig);
+            setInitialGameState(engine, resolvedConfig);
         }
-        // Step 5: Apply cheats
+        // Step 8: Apply cheats
         console.log("Applying cheats...");
-        if (urlConfig.noclip) {
+        if (resolvedConfig.noclip) {
             cheatManager.set(CheatFlag.Noclip, true);
         }
-        if (urlConfig.god) {
+        if (resolvedConfig.god) {
             cheatManager.set(CheatFlag.God, true);
         }
-        if (urlConfig.infTime) {
+        if (resolvedConfig.infTime) {
             cheatManager.set(CheatFlag.InfTime, true);
         }
-        if (urlConfig.givesword) {
+        if (resolvedConfig.reveal) {
+            // TODO: Implement reveal cheat (not available in current CheatManager)
+            console.log("Reveal cheat enabled");
+        }
+        if (resolvedConfig.givesword) {
             cheatManager.set(CheatFlag.GiveSword, true);
         }
-        if (urlConfig.setguards !== undefined) {
+        if (resolvedConfig.setguards !== undefined) {
             // TODO: Implement setguards cheat
-            console.log(`Set guards cheat: ${urlConfig.setguards}`);
+            console.log(`Set guards cheat: ${resolvedConfig.setguards}`);
         }
-        // Step 6: Handle autoplay and cutscenes
-        if (urlConfig.cutscenes === false) {
+        // Step 9: Handle cutscenes and autoplay
+        if (resolvedConfig.cutscenes === false) {
             // Skip cutscenes
             console.log("Cutscenes disabled");
             // TODO: Implement cutscene skipping
         }
         // Handle autoplay: start muted if needed until user input
-        if (urlConfig.mute) {
-            console.log("Starting muted due to URL config");
+        if (resolvedConfig.mute) {
+            console.log("Starting muted due to boot config");
             audioManager.setMuted(true);
         }
-        // Step 7: Set performance settings
-        if (urlConfig.speed) {
+        // Step 10: Set performance settings
+        if (resolvedConfig.speed) {
             // TODO: Set game speed
-            console.log(`Game speed set to: ${urlConfig.speed}x`);
+            console.log(`Game speed set to: ${resolvedConfig.speed}x`);
         }
-        if (urlConfig.zoom) {
-            // TODO: Set zoom level
-            console.log(`Zoom level set to: ${urlConfig.zoom}x`);
-        }
-        // Step 8: Set UI settings
-        if (urlConfig.hud !== undefined) {
+        // Step 11: Set UI settings
+        if (resolvedConfig.hud !== undefined) {
             // TODO: Set HUD visibility
-            console.log(`HUD visibility set to: ${urlConfig.hud}`);
+            console.log(`HUD visibility set to: ${resolvedConfig.hud}`);
         }
-        if (urlConfig.lang) {
+        if (resolvedConfig.lang) {
             // TODO: Set language
-            console.log(`Language set to: ${urlConfig.lang}`);
+            console.log(`Language set to: ${resolvedConfig.lang}`);
         }
-        // Step 9: Handle editor mode
-        if (urlConfig.editor) {
+        // Step 12: Handle editor mode
+        if (resolvedConfig.editor) {
             console.log("Editor mode enabled");
             // TODO: Enable editor mode
         }
@@ -197,7 +181,7 @@ export async function bootGame(context) {
         return {
             success: true,
             warnings,
-            config: urlConfig
+            config: resolvedConfig
         };
     }
     catch (error) {

@@ -52,6 +52,8 @@ interface RenderableEntity {
     height: number;
     visible: boolean;
     render: (ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number) => void;
+    priority?: number; // Higher priority entities render first
+    layer?: number; // Layer for depth sorting
 }
 
 interface Viewport {
@@ -59,6 +61,18 @@ interface Viewport {
     y: number;
     width: number;
     height: number;
+    margin: number; // Extra margin for smooth scrolling
+}
+
+interface RenderStats {
+    totalEntities: number;
+    culledEntities: number;
+    renderedEntities: number;
+    batches: number;
+    frameTime: number;
+    cullingEfficiency: number;
+    batchEfficiency: number;
+    memoryUsage: number;
 }
 
 export class Renderer {
@@ -87,21 +101,32 @@ export class Renderer {
     private loadedImages: Map<string, HTMLImageElement> = new Map();
     private isDisposed = false;
 
-    // Performance optimizations
-    private viewport: Viewport = { x: 0, y: 0, width: 0, height: 0 };
+    // Enhanced Performance optimizations
+    private viewport: Viewport = { x: 0, y: 0, width: 0, height: 0, margin: 50 };
     private renderableEntities: RenderableEntity[] = [];
     private batchSize = 100; // Number of entities to render in a batch
     private lastFrameTime = 0;
     private frameTimeThreshold = 16.67; // 60 FPS threshold
     private cullingEnabled = true;
     private batchingEnabled = true;
-    private renderStats = {
+    private depthSortingEnabled = true;
+    private prioritySortingEnabled = true;
+    private renderStats: RenderStats = {
         totalEntities: 0,
         culledEntities: 0,
         renderedEntities: 0,
         batches: 0,
-        frameTime: 0
+        frameTime: 0,
+        cullingEfficiency: 0,
+        batchEfficiency: 0,
+        memoryUsage: 0
     };
+
+    // Performance monitoring
+    private performanceHistory: number[] = [];
+    private maxHistorySize = 60; // Keep last 60 frames
+    private adaptiveBatchSize = true;
+    private adaptiveCulling = true;
 
     constructor(canvas: HTMLCanvasElement, platformKey?: string) {
         const context = canvas.getContext("2d");
@@ -255,23 +280,27 @@ export class Renderer {
         this.internalCtx.globalCompositeOperation = 'source-over';
         
         // Pre-allocate commonly used objects
-        this.viewport = { x: 0, y: 0, width: 0, height: 0 };
+        this.viewport = { x: 0, y: 0, width: 0, height: 0, margin: 50 };
         this.renderStats = {
             totalEntities: 0,
             culledEntities: 0,
             renderedEntities: 0,
             batches: 0,
-            frameTime: 0
+            frameTime: 0,
+            cullingEfficiency: 0,
+            batchEfficiency: 0,
+            memoryUsage: 0
         };
     }
 
+    // Enhanced public methods for performance control
     public addRenderableEntity(entity: RenderableEntity): void {
         this.renderableEntities.push(entity);
     }
 
     public removeRenderableEntity(entity: RenderableEntity): void {
         const index = this.renderableEntities.indexOf(entity);
-        if (index > -1) {
+        if (index !== -1) {
             this.renderableEntities.splice(index, 1);
         }
     }
@@ -288,36 +317,113 @@ export class Renderer {
             x: this.cameraX - margin,
             y: this.cameraY - margin,
             width: internalDims.width + margin * 2,
-            height: internalDims.height + margin * 2
+            height: internalDims.height + margin * 2,
+            margin: margin
         };
     }
 
+    // Enhanced viewport culling with margin
     private isEntityInViewport(entity: RenderableEntity): boolean {
-        if (!this.cullingEnabled) return true;
-        
+        if (!this.cullingEnabled || !entity.visible) {
+            return false;
+        }
+
+        const margin = this.viewport.margin;
+        const entityLeft = entity.x;
         const entityRight = entity.x + entity.width;
+        const entityTop = entity.y;
         const entityBottom = entity.y + entity.height;
-        const viewportRight = this.viewport.x + this.viewport.width;
-        const viewportBottom = this.viewport.y + this.viewport.height;
-        
-        return !(entity.x > viewportRight || 
-                entityRight < this.viewport.x || 
-                entity.y > viewportBottom || 
-                entityBottom < this.viewport.y);
+
+        const viewportLeft = this.viewport.x - margin;
+        const viewportRight = this.viewport.x + this.viewport.width + margin;
+        const viewportTop = this.viewport.y - margin;
+        const viewportBottom = this.viewport.y + this.viewport.height + margin;
+
+        return !(entityRight < viewportLeft || 
+                entityLeft > viewportRight || 
+                entityBottom < viewportTop || 
+                entityTop > viewportBottom);
     }
 
+    // Enhanced batch rendering with priority and layer sorting
     private renderBatch(entities: RenderableEntity[], startIndex: number, endIndex: number): void {
         for (let i = startIndex; i < endIndex && i < entities.length; i++) {
             const entity = entities[i];
-            if (entity.visible && this.isEntityInViewport(entity)) {
-                entity.render(this.internalCtx, this.cameraX, this.cameraY);
-                this.renderStats.renderedEntities++;
+            
+            if (this.isEntityInViewport(entity)) {
+                try {
+                    entity.render(this.internalCtx, this.cameraX, this.cameraY);
+                    this.renderStats.renderedEntities++;
+                } catch (error) {
+                    console.warn('Error rendering entity:', error);
+                }
             } else {
                 this.renderStats.culledEntities++;
             }
         }
     }
 
+    // Sort entities by priority and layer for optimal rendering
+    private sortEntitiesForRendering(): void {
+        if (this.prioritySortingEnabled || this.depthSortingEnabled) {
+            this.renderableEntities.sort((a, b) => {
+                // Sort by priority first (higher priority renders first)
+                if (this.prioritySortingEnabled && a.priority !== b.priority) {
+                    return (b.priority || 0) - (a.priority || 0);
+                }
+                // Then sort by layer (lower layer renders first - background to foreground)
+                if (this.depthSortingEnabled && a.layer !== b.layer) {
+                    return (a.layer || 0) - (b.layer || 0);
+                }
+                return 0;
+            });
+        }
+    }
+
+    // Adaptive performance optimization
+    private updatePerformanceOptimizations(): void {
+        if (!this.adaptiveBatchSize && !this.adaptiveCulling) {
+            return;
+        }
+
+        const avgFrameTime = this.getAverageFrameTime();
+        const cullingEfficiency = this.renderStats.totalEntities > 0 ? 
+            this.renderStats.culledEntities / this.renderStats.totalEntities : 0;
+
+        // Adaptive batch size based on performance
+        if (this.adaptiveBatchSize) {
+            if (avgFrameTime > 20) { // Poor performance
+                this.batchSize = Math.max(50, this.batchSize - 10);
+            } else if (avgFrameTime < 10 && cullingEfficiency > 0.3) { // Good performance
+                this.batchSize = Math.min(200, this.batchSize + 10);
+            }
+        }
+
+        // Adaptive culling based on entity count
+        if (this.adaptiveCulling) {
+            if (this.renderStats.totalEntities > 200) {
+                this.cullingEnabled = true;
+                this.viewport.margin = Math.min(100, this.viewport.margin + 10);
+            } else if (this.renderStats.totalEntities < 50) {
+                this.viewport.margin = Math.max(20, this.viewport.margin - 5);
+            }
+        }
+    }
+
+    // Performance monitoring
+    private updatePerformanceHistory(frameTime: number): void {
+        this.performanceHistory.push(frameTime);
+        if (this.performanceHistory.length > this.maxHistorySize) {
+            this.performanceHistory.shift();
+        }
+    }
+
+    private getAverageFrameTime(): number {
+        if (this.performanceHistory.length === 0) return 0;
+        return this.performanceHistory.reduce((sum, time) => sum + time, 0) / this.performanceHistory.length;
+    }
+
+    // Enhanced render method with performance optimizations
     public render(): void {
         const startTime = performance.now();
         
@@ -327,13 +433,19 @@ export class Renderer {
         // Update viewport for culling
         this.updateViewport();
         
+        // Sort entities for optimal rendering
+        this.sortEntitiesForRendering();
+        
         // Reset render stats
         this.renderStats = {
             totalEntities: this.renderableEntities.length,
             culledEntities: 0,
             renderedEntities: 0,
             batches: 0,
-            frameTime: 0
+            frameTime: 0,
+            cullingEfficiency: 0,
+            batchEfficiency: 0,
+            memoryUsage: this.getMemoryUsage()
         };
         
         if (this.batchingEnabled && this.renderableEntities.length > this.batchSize) {
@@ -366,7 +478,16 @@ export class Renderer {
             this.ctx.canvas.height
         );
         
+        // Update performance stats
         this.renderStats.frameTime = performance.now() - startTime;
+        this.renderStats.cullingEfficiency = this.renderStats.totalEntities > 0 ? 
+            this.renderStats.culledEntities / this.renderStats.totalEntities : 0;
+        this.renderStats.batchEfficiency = this.renderStats.batches > 0 ? 
+            this.renderStats.renderedEntities / this.renderStats.batches : 0;
+        
+        // Update performance history and optimizations
+        this.updatePerformanceHistory(this.renderStats.frameTime);
+        this.updatePerformanceOptimizations();
     }
 
     public getRenderStats(): typeof this.renderStats {
@@ -802,6 +923,24 @@ export class Renderer {
             window.removeEventListener('resize', this.handleResize);
             document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
             
+            // Clear renderable entities
+            this.renderableEntities.length = 0;
+            
+            // Clear performance history
+            this.performanceHistory.length = 0;
+            
+            // Reset render stats
+            this.renderStats = {
+                totalEntities: 0,
+                culledEntities: 0,
+                renderedEntities: 0,
+                batches: 0,
+                frameTime: 0,
+                cullingEfficiency: 0,
+                batchEfficiency: 0,
+                memoryUsage: 0
+            };
+            
             this.isDisposed = true;
             console.log("Renderer cleanup completed successfully");
         } catch (error) {
@@ -814,23 +953,27 @@ export class Renderer {
      */
     public async loadImage(src: string): Promise<HTMLImageElement> {
         if (this.isDisposed) {
-            throw new Error("Renderer has been disposed");
+            throw new Error("Renderer is disposed, cannot load image");
         }
-        
-        // Return cached image if available
+
+        // Check if image is already loaded
         if (this.loadedImages.has(src)) {
-            const cachedImage = this.loadedImages.get(src)!;
-            if (cachedImage.complete && cachedImage.naturalWidth > 0) {
+            const cachedImage = this.loadedImages.get(src);
+            if (cachedImage && cachedImage.complete) {
                 return cachedImage;
             }
         }
-        
+
         return new Promise((resolve, reject) => {
             const img = new Image();
             
             img.onload = () => {
-                this.loadedImages.set(src, img);
-                resolve(img);
+                if (!this.isDisposed) {
+                    this.loadedImages.set(src, img);
+                    resolve(img);
+                } else {
+                    reject(new Error("Renderer disposed during image loading"));
+                }
             };
             
             img.onerror = () => {
@@ -838,19 +981,28 @@ export class Renderer {
                 reject(new Error(`Failed to load image: ${src}`));
             };
             
+            // Set crossOrigin for external images
+            if (src.startsWith('http') && !src.startsWith(window.location.origin)) {
+                img.crossOrigin = 'anonymous';
+            }
+            
             img.src = src;
         });
     }
 
     /**
-     * Clear cached images for a specific source or all images
+     * Clear image cache to free memory
      */
-    public clearImageCache(src?: string): void {
-        if (src) {
-            this.loadedImages.delete(src);
-        } else {
-            this.loadedImages.clear();
-        }
+    public clearImageCache(): void {
+        this.loadedImages.clear();
+        console.log("Image cache cleared");
+    }
+
+    /**
+     * Remove specific image from cache
+     */
+    public removeImageFromCache(src: string): void {
+        this.loadedImages.delete(src);
     }
 
     private handleResize = (): void => {
@@ -893,5 +1045,26 @@ export class Renderer {
                 piMenuButton.click();
             }
         }
+    }
+
+    // Memory usage estimation
+    private getMemoryUsage(): number {
+        let memoryUsage = 0;
+        
+        // Estimate canvas memory usage
+        if (this.internalCanvas) {
+            const width = this.internalCanvas.width;
+            const height = this.internalCanvas.height;
+            memoryUsage += width * height * 4; // 4 bytes per pixel (RGBA)
+        }
+        
+        // Estimate image memory usage
+        this.loadedImages.forEach(image => {
+            if (image.complete) {
+                memoryUsage += image.width * image.height * 4;
+            }
+        });
+        
+        return memoryUsage;
     }
 } 

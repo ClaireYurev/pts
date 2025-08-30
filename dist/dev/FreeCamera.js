@@ -1,197 +1,324 @@
-import { Vec2 } from '../engine/Vector2.js';
 export class FreeCamera {
-    constructor(config = {}) {
-        this.enabled = false;
-        this.position = new Vec2(0, 0);
-        this.velocity = new Vec2(0, 0);
-        this.target = new Vec2(0, 0);
+    constructor() {
+        this._isEnabled = false;
+        this.isActive = false;
         this.keys = new Set();
-        this.config = {
-            enabled: false,
-            speed: 200,
-            acceleration: 800,
-            maxSpeed: 400,
-            ...config
+        this.targetEntity = null;
+        this.state = {
+            x: 0,
+            y: 0,
+            zoom: 1.0,
+            targetX: 0,
+            targetY: 0,
+            isFollowing: true
         };
+        this.config = {
+            panSpeed: 200, // pixels per second
+            zoomSpeed: 0.1,
+            maxZoom: 3.0,
+            minZoom: 0.5,
+            smoothFollow: true,
+            followSpeed: 5.0
+        };
+        this.setupInputHandling();
     }
     /**
      * Enable/disable free camera
      */
     setEnabled(enabled) {
-        this.enabled = enabled;
+        this._isEnabled = enabled;
         if (!enabled) {
-            // Reset velocity when disabling
-            this.velocity = new Vec2(0, 0);
+            this.isActive = false;
+            this.keys.clear();
         }
     }
     /**
-     * Check if free camera is enabled
+     * Get enabled state
      */
     isEnabled() {
-        return this.enabled;
+        return this._isEnabled;
+    }
+    /**
+     * Toggle free camera mode
+     */
+    toggle() {
+        if (this._isEnabled) {
+            this.isActive = !this.isActive;
+            if (this.isActive) {
+                console.log('Free camera activated');
+            }
+            else {
+                console.log('Free camera deactivated');
+                this.state.isFollowing = true;
+            }
+        }
+    }
+    /**
+     * Update camera position and state
+     */
+    update(deltaTime) {
+        if (!this.isEnabled || !this.isActive) {
+            return;
+        }
+        // Handle keyboard input for camera movement
+        this.handleKeyboardInput(deltaTime);
+        // Handle mouse input for camera movement (if needed)
+        this.handleMouseInput();
+        // Apply zoom constraints
+        this.state.zoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, this.state.zoom));
     }
     /**
      * Set camera position
      */
     setPosition(x, y) {
-        this.position = new Vec2(x, y);
-        this.target = new Vec2(x, y);
+        this.state.x = x;
+        this.state.y = y;
+        this.state.targetX = x;
+        this.state.targetY = y;
     }
     /**
-     * Get current camera position
+     * Set camera zoom
+     */
+    setZoom(zoom) {
+        this.state.zoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, zoom));
+    }
+    /**
+     * Set target entity for following
+     */
+    setTarget(entity) {
+        this.targetEntity = entity;
+    }
+    /**
+     * Get current camera state
+     */
+    getState() {
+        return { ...this.state };
+    }
+    /**
+     * Get camera position
      */
     getPosition() {
-        return new Vec2(this.position.x, this.position.y);
+        return { x: this.state.x, y: this.state.y };
     }
     /**
-     * Set camera target (for smooth movement)
+     * Get camera zoom
      */
-    setTarget(x, y) {
-        this.target = new Vec2(x, y);
+    getZoom() {
+        return this.state.zoom;
     }
     /**
-     * Get camera target
+     * Check if free camera is active
      */
-    getTarget() {
-        return new Vec2(this.target.x, this.target.y);
+    isFreeCameraActive() {
+        return this._isEnabled && this.isActive;
     }
     /**
-     * Handle key press
+     * Check if camera should follow target
      */
-    onKeyDown(key) {
-        if (!this.enabled)
+    shouldFollowTarget() {
+        return !this.isActive && this.state.isFollowing;
+    }
+    /**
+     * Update camera to follow target entity
+     */
+    updateFollowTarget(deltaTime) {
+        if (!this.shouldFollowTarget() || !this.targetEntity) {
             return;
-        this.keys.add(key.toLowerCase());
-    }
-    /**
-     * Handle key release
-     */
-    onKeyUp(key) {
-        if (!this.enabled)
-            return;
-        this.keys.delete(key.toLowerCase());
-    }
-    /**
-     * Update camera movement
-     */
-    update(deltaTime) {
-        if (!this.enabled)
-            return;
-        const speed = this.config.speed || 200;
-        const acceleration = this.config.acceleration || 800;
-        const maxSpeed = this.config.maxSpeed || 400;
-        // Calculate input direction
-        let inputX = 0;
-        let inputY = 0;
-        if (this.keys.has('w') || this.keys.has('arrowup')) {
-            inputY -= 1;
         }
-        if (this.keys.has('s') || this.keys.has('arrowdown')) {
-            inputY += 1;
-        }
-        if (this.keys.has('a') || this.keys.has('arrowleft')) {
-            inputX -= 1;
-        }
-        if (this.keys.has('d') || this.keys.has('arrowright')) {
-            inputX += 1;
-        }
-        // Normalize diagonal movement
-        if (inputX !== 0 && inputY !== 0) {
-            inputX *= 0.707; // 1/√2
-            inputY *= 0.707;
-        }
-        // Calculate target velocity
-        const targetVelocity = new Vec2(inputX * speed, inputY * speed);
-        // Smooth acceleration towards target velocity
-        const accelerationStep = acceleration * deltaTime;
-        if (targetVelocity.x !== 0) {
-            this.velocity.x = this.lerp(this.velocity.x, targetVelocity.x, accelerationStep);
+        const targetX = this.targetEntity.position?.x || this.targetEntity.x || 0;
+        const targetY = this.targetEntity.position?.y || this.targetEntity.y || 0;
+        if (this.config.smoothFollow) {
+            // Smooth follow with interpolation
+            const followSpeed = this.config.followSpeed * deltaTime;
+            this.state.x += (targetX - this.state.x) * followSpeed;
+            this.state.y += (targetY - this.state.y) * followSpeed;
         }
         else {
-            this.velocity.x = this.lerp(this.velocity.x, 0, accelerationStep * 2); // Faster deceleration
+            // Direct follow
+            this.state.x = targetX;
+            this.state.y = targetY;
         }
-        if (targetVelocity.y !== 0) {
-            this.velocity.y = this.lerp(this.velocity.y, targetVelocity.y, accelerationStep);
+    }
+    /**
+     * Handle keyboard input for camera movement
+     */
+    handleKeyboardInput(deltaTime) {
+        const panDistance = this.config.panSpeed * deltaTime;
+        // WASD movement
+        if (this.keys.has('w') || this.keys.has('W') || this.keys.has('ArrowUp')) {
+            this.state.y -= panDistance;
         }
-        else {
-            this.velocity.y = this.lerp(this.velocity.y, 0, accelerationStep * 2); // Faster deceleration
+        if (this.keys.has('s') || this.keys.has('S') || this.keys.has('ArrowDown')) {
+            this.state.y += panDistance;
         }
-        // Clamp velocity to max speed
-        const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
-        if (currentSpeed > maxSpeed) {
-            const scale = maxSpeed / currentSpeed;
-            this.velocity.x *= scale;
-            this.velocity.y *= scale;
+        if (this.keys.has('a') || this.keys.has('A') || this.keys.has('ArrowLeft')) {
+            this.state.x -= panDistance;
         }
-        // Update position
-        this.position.x += this.velocity.x * deltaTime;
-        this.position.y += this.velocity.y * deltaTime;
-        // Apply bounds if configured
-        if (this.config.bounds) {
-            const bounds = this.config.bounds;
-            this.position.x = Math.max(bounds.minX, Math.min(bounds.maxX, this.position.x));
-            this.position.y = Math.max(bounds.minY, Math.min(bounds.maxY, this.position.y));
+        if (this.keys.has('d') || this.keys.has('D') || this.keys.has('ArrowRight')) {
+            this.state.x += panDistance;
         }
-        // Update target to match position
-        this.target = new Vec2(this.position.x, this.position.y);
+        // Zoom controls
+        if (this.keys.has('q') || this.keys.has('Q')) {
+            this.state.zoom -= this.config.zoomSpeed;
+        }
+        if (this.keys.has('e') || this.keys.has('E')) {
+            this.state.zoom += this.config.zoomSpeed;
+        }
+        // Reset camera
+        if (this.keys.has('r') || this.keys.has('R')) {
+            this.resetCamera();
+        }
+        // Center on target
+        if (this.keys.has('c') || this.keys.has('C')) {
+            this.centerOnTarget();
+        }
     }
     /**
-     * Linear interpolation helper
+     * Handle mouse input for camera movement
      */
-    lerp(start, end, factor) {
-        return start + (end - start) * Math.min(1, factor);
+    handleMouseInput() {
+        // Mouse wheel zoom
+        document.addEventListener('wheel', (e) => {
+            if (!this.isActive)
+                return;
+            e.preventDefault();
+            const zoomDelta = e.deltaY > 0 ? -this.config.zoomSpeed : this.config.zoomSpeed;
+            this.state.zoom += zoomDelta;
+        }, { passive: false });
+        // Middle mouse button drag for panning
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        document.addEventListener('mousedown', (e) => {
+            if (!this.isActive || e.button !== 1)
+                return; // Middle mouse button
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (!this.isActive || !isDragging)
+                return;
+            const deltaX = e.clientX - lastMouseX;
+            const deltaY = e.clientY - lastMouseY;
+            this.state.x -= deltaX / this.state.zoom;
+            this.state.y -= deltaY / this.state.zoom;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            e.preventDefault();
+        });
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 1) {
+                isDragging = false;
+            }
+        });
     }
     /**
-     * Set camera bounds
+     * Setup input handling
      */
-    setBounds(bounds) {
-        this.config.bounds = bounds;
+    setupInputHandling() {
+        // Keyboard event listeners
+        document.addEventListener('keydown', (e) => {
+            if (!this.isEnabled)
+                return;
+            // Toggle free camera with Ctrl+Shift+C
+            if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+                e.preventDefault();
+                this.toggle();
+                return;
+            }
+            if (this.isActive) {
+                this.keys.add(e.key);
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            this.keys.delete(e.key);
+        });
+        // Prevent default behavior for camera keys when active
+        document.addEventListener('keydown', (e) => {
+            if (this.isActive && this.isCameraKey(e.key)) {
+                e.preventDefault();
+            }
+        });
     }
     /**
-     * Clear camera bounds
+     * Check if key is used for camera control
      */
-    clearBounds() {
-        this.config.bounds = undefined;
+    isCameraKey(key) {
+        const cameraKeys = ['w', 'W', 'a', 'A', 's', 'S', 'd', 'D', 'q', 'Q', 'e', 'E', 'r', 'R', 'c', 'C', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        return cameraKeys.includes(key);
     }
     /**
-     * Set camera speed
+     * Reset camera to default position
      */
-    setSpeed(speed) {
-        this.config.speed = speed;
+    resetCamera() {
+        this.state.x = 0;
+        this.state.y = 0;
+        this.state.zoom = 1.0;
+        console.log('Camera reset to origin');
     }
     /**
-     * Set camera acceleration
+     * Center camera on target entity
      */
-    setAcceleration(acceleration) {
-        this.config.acceleration = acceleration;
+    centerOnTarget() {
+        if (!this.targetEntity) {
+            console.log('No target entity to center on');
+            return;
+        }
+        const targetX = this.targetEntity.position?.x || this.targetEntity.x || 0;
+        const targetY = this.targetEntity.position?.y || this.targetEntity.y || 0;
+        this.state.x = targetX;
+        this.state.y = targetY;
+        console.log('Camera centered on target');
     }
     /**
-     * Set max speed
+     * Get camera configuration
      */
-    setMaxSpeed(maxSpeed) {
-        this.config.maxSpeed = maxSpeed;
+    getConfig() {
+        return { ...this.config };
     }
     /**
-     * Get debug info
+     * Set camera configuration
      */
-    getDebugInfo() {
+    setConfig(config) {
+        this.config = { ...this.config, ...config };
+    }
+    /**
+     * Get camera bounds (useful for UI positioning)
+     */
+    getCameraBounds() {
+        // This would depend on the viewport size
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const halfWidth = viewportWidth / (2 * this.state.zoom);
+        const halfHeight = viewportHeight / (2 * this.state.zoom);
         return {
-            enabled: this.enabled,
-            position: { x: this.position.x, y: this.position.y },
-            velocity: { x: this.velocity.x, y: this.velocity.y },
-            target: { x: this.target.x, y: this.target.y },
-            keys: Array.from(this.keys),
-            config: this.config
+            left: this.state.x - halfWidth,
+            right: this.state.x + halfWidth,
+            top: this.state.y - halfHeight,
+            bottom: this.state.y + halfHeight
         };
     }
     /**
-     * Reset camera to origin
+     * Convert screen coordinates to world coordinates
      */
-    reset() {
-        this.position = new Vec2(0, 0);
-        this.target = new Vec2(0, 0);
-        this.velocity = new Vec2(0, 0);
-        this.keys.clear();
+    screenToWorld(screenX, screenY) {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const worldX = (screenX - viewportWidth / 2) / this.state.zoom + this.state.x;
+        const worldY = (screenY - viewportHeight / 2) / this.state.zoom + this.state.y;
+        return { x: worldX, y: worldY };
+    }
+    /**
+     * Convert world coordinates to screen coordinates
+     */
+    worldToScreen(worldX, worldY) {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const screenX = (worldX - this.state.x) * this.state.zoom + viewportWidth / 2;
+        const screenY = (worldY - this.state.y) * this.state.zoom + viewportHeight / 2;
+        return { x: screenX, y: screenY };
     }
 }
 //# sourceMappingURL=FreeCamera.js.map

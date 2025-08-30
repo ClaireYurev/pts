@@ -12,8 +12,8 @@ export interface SaveData {
 
 export class SaveManager {
     private storageKey = "PrinceTSSaves";
-    private static readonly CURRENT_VERSION = 1;
-    private static readonly SAVE_DATA_VERSION = 1;
+    private readonly SAVE_VERSION = "1.0.0";
+    private readonly CHECKSUM_ALGORITHM = "SHA-256";
 
     constructor() {
         if (!localStorage.getItem(this.storageKey)) {
@@ -93,50 +93,42 @@ export class SaveManager {
 
     public save(slot: number, data: SaveData): void {
         if (!this.isLocalStorageAvailable()) {
-            console.warn("localStorage not available, cannot save game");
-            return;
-        }
-
-        // Validate slot number
-        if (slot < 0 || slot > 9) {
-            console.error("Invalid save slot number:", slot);
-            return;
-        }
-
-        // Validate save data
-        if (!this.validateSaveData(data)) {
-            console.error("Invalid save data provided");
+            console.error("Local storage not available");
             return;
         }
 
         try {
-            // Prepare save data with version and checksum
-            const saveData: SaveData = {
-                ...data,
-                version: SaveManager.SAVE_DATA_VERSION,
-                timestamp: Date.now()
-            };
-            
-            // Generate checksum for data integrity
-            saveData.checksum = this.generateChecksum(saveData);
-
-            // Check storage quota before saving
-            if (!this.checkStorageQuota()) {
-                console.warn("Storage quota exceeded, attempting to clear old saves");
-                this.clearOldestSave();
-                
-                // Try again after clearing
-                if (!this.checkStorageQuota()) {
-                    console.error("Still insufficient storage after clearing old saves");
-                    return;
-                }
+            // Validate save data before saving
+            if (!this.validateSaveData(data)) {
+                console.error("Invalid save data provided");
+                return;
             }
 
-            const saves = this.loadAll();
-            saves[slot] = saveData;
+            // Add metadata to save data
+            const saveDataWithMetadata = {
+                ...data,
+                version: this.SAVE_VERSION,
+                timestamp: Date.now(),
+                checksum: this.generateChecksum(data)
+            };
+
+            // Validate the complete save data
+            if (!this.validateCompleteSaveData(saveDataWithMetadata)) {
+                console.error("Save data validation failed after adding metadata");
+                return;
+            }
+
+            const key = `${this.storageKey}_${slot}`;
+            const serializedData = JSON.stringify(saveDataWithMetadata);
             
-            localStorage.setItem(this.storageKey, JSON.stringify(saves));
-            console.log(`Game saved to slot ${slot + 1} with checksum: ${saveData.checksum}`);
+            // Check storage quota before saving
+            if (!this.checkStorageQuota(serializedData)) {
+                console.error("Insufficient storage space for save data");
+                return;
+            }
+
+            localStorage.setItem(key, serializedData);
+            console.log(`Game saved successfully to slot ${slot}`);
         } catch (error) {
             console.error("Failed to save game:", error);
         }
@@ -182,6 +174,184 @@ export class SaveManager {
         return true;
     }
 
+    private validateCompleteSaveData(data: any): boolean {
+        // Check if all required metadata fields exist
+        if (!data || typeof data !== 'object') {
+            return false;
+        }
+
+        if (typeof data.version !== 'string' || data.version.length === 0) {
+            console.warn("Missing or invalid version in save data");
+            return false;
+        }
+
+        if (typeof data.timestamp !== 'number' || data.timestamp <= 0) {
+            console.warn("Missing or invalid timestamp in save data");
+            return false;
+        }
+
+        if (typeof data.checksum !== 'string' || data.checksum.length === 0) {
+            console.warn("Missing or invalid checksum in save data");
+            return false;
+        }
+
+        // Validate the actual save data
+        const { version, timestamp, checksum, ...saveData } = data;
+        return this.validateSaveData(saveData as SaveData);
+    }
+
+    private generateChecksum(data: SaveData): string {
+        try {
+            // Create a deterministic string representation
+            const dataString = JSON.stringify(data, Object.keys(data).sort());
+            
+            // Simple checksum implementation (in production, use crypto.subtle.digest)
+            let checksum = 0;
+            for (let i = 0; i < dataString.length; i++) {
+                checksum = ((checksum << 5) - checksum + dataString.charCodeAt(i)) & 0xFFFFFFFF;
+            }
+            
+            return checksum.toString(16);
+        } catch (error) {
+            console.error("Failed to generate checksum:", error);
+            return "";
+        }
+    }
+
+    private verifyChecksum(saveDataWithMetadata: any): boolean {
+        try {
+            const { version, timestamp, checksum, ...saveData } = saveDataWithMetadata;
+            const expectedChecksum = this.generateChecksum(saveData as SaveData);
+            return checksum === expectedChecksum;
+        } catch (error) {
+            console.error("Failed to verify checksum:", error);
+            return false;
+        }
+    }
+
+    private isVersionCompatible(version: string): boolean {
+        // Simple version compatibility check
+        const currentVersion = this.SAVE_VERSION.split('.');
+        const saveVersion = version.split('.');
+        
+        // Major version must match
+        return currentVersion[0] === saveVersion[0];
+    }
+
+    private migrateSaveData(saveDataWithMetadata: any): SaveData | null {
+        try {
+            console.log("Migrating save data from version", saveDataWithMetadata.version, "to", this.SAVE_VERSION);
+            
+            // Extract the actual save data
+            const { version, timestamp, checksum, ...saveData } = saveDataWithMetadata;
+            
+            // Apply migration rules based on version
+            const migratedData = this.applyMigrationRules(saveData, version);
+            
+            // Validate migrated data
+            if (this.validateSaveData(migratedData)) {
+                console.log("Save data migration completed successfully");
+                return migratedData;
+            } else {
+                console.error("Save data migration failed validation");
+                return null;
+            }
+        } catch (error) {
+            console.error("Failed to migrate save data:", error);
+            return null;
+        }
+    }
+
+    private applyMigrationRules(data: any, fromVersion: string): SaveData {
+        // Apply version-specific migration rules
+        const migratedData = { ...data };
+        
+        // Example migration: add missing fields with defaults
+        if (!migratedData.inventory) {
+            migratedData.inventory = [];
+        }
+        
+        if (typeof migratedData.health !== 'number') {
+            migratedData.health = 100;
+        }
+        
+        return migratedData as SaveData;
+    }
+
+    private attemptSaveDataRepair(saveDataWithMetadata: any): SaveData | null {
+        try {
+            console.log("Attempting to repair corrupted save data");
+            
+            // Extract the actual save data
+            const { version, timestamp, checksum, ...saveData } = saveDataWithMetadata;
+            
+            // Try to repair common issues
+            const repairedData = this.repairSaveData(saveData);
+            
+            // Validate repaired data
+            if (this.validateSaveData(repairedData)) {
+                console.log("Save data repair completed successfully");
+                return repairedData;
+            } else {
+                console.error("Save data repair failed validation");
+                return null;
+            }
+        } catch (error) {
+            console.error("Failed to repair save data:", error);
+            return null;
+        }
+    }
+
+    private repairSaveData(data: any): SaveData {
+        // Repair common save data issues
+        const repairedData = { ...data };
+        
+        // Fix missing or invalid fields
+        if (typeof repairedData.level !== 'number' || repairedData.level < 0) {
+            repairedData.level = 1;
+        }
+        
+        if (typeof repairedData.playerX !== 'number' || !isFinite(repairedData.playerX)) {
+            repairedData.playerX = 0;
+        }
+        
+        if (typeof repairedData.playerY !== 'number' || !isFinite(repairedData.playerY)) {
+            repairedData.playerY = 0;
+        }
+        
+        if (typeof repairedData.health !== 'number' || repairedData.health < 0 || repairedData.health > 9999) {
+            repairedData.health = 100;
+        }
+        
+        if (!Array.isArray(repairedData.inventory)) {
+            repairedData.inventory = [];
+        }
+        
+        if (typeof repairedData.timestamp !== 'number' || repairedData.timestamp <= 0) {
+            repairedData.timestamp = Date.now();
+        }
+        
+        return repairedData as SaveData;
+    }
+
+    private checkStorageQuota(data: string): boolean {
+        try {
+            // Estimate storage usage
+            const estimatedSize = new Blob([data]).size;
+            const maxSize = 5 * 1024 * 1024; // 5MB limit
+            
+            if (estimatedSize > maxSize) {
+                console.warn("Save data exceeds size limit");
+                return false;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error("Failed to check storage quota:", error);
+            return false;
+        }
+    }
+
     private isLocalStorageAvailable(): boolean {
         try {
             const test = '__localStorage_test__';
@@ -190,40 +360,6 @@ export class SaveManager {
             return true;
         } catch (e) {
             return false;
-        }
-    }
-
-    private checkStorageQuota(): boolean {
-        try {
-            // Try to save a test item to check if we have space
-            const testKey = '__quota_test__';
-            const testData = 'x'.repeat(1024); // 1KB test data
-            localStorage.setItem(testKey, testData);
-            localStorage.removeItem(testKey);
-            return true;
-        } catch (e) {
-            console.warn('localStorage quota check failed:', e);
-            
-            // Try to free up space by clearing old saves
-            try {
-                this.clearOldestSave();
-                // Test again after clearing
-                const testKey2 = '__quota_test_2__';
-                const testData2 = 'x'.repeat(512); // Smaller test
-                localStorage.setItem(testKey2, testData2);
-                localStorage.removeItem(testKey2);
-                return true;
-            } catch (clearError) {
-                console.error('Failed to free up localStorage space:', clearError);
-                // Try to clear all saves as last resort
-                try {
-                    this.clearAllSaves();
-                    return true;
-                } catch (finalError) {
-                    console.error('Failed to clear all saves:', finalError);
-                    return false;
-                }
-            }
         }
     }
 

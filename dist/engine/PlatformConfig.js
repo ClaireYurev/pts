@@ -44,7 +44,10 @@ export class PlatformManager {
                     platforms: []
                 });
             }
-            resolutionMap.get(key).platforms.push(platform);
+            const resolutionEntry = resolutionMap.get(key);
+            if (resolutionEntry) {
+                resolutionEntry.platforms.push(platform);
+            }
         });
         return Array.from(resolutionMap.values()).sort((a, b) => (a.width * a.height) - (b.width * b.height));
     }

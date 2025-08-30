@@ -220,7 +220,6 @@ export class SettingsMenu {
         }
     }
     updateDisplay() {
-        // Update all display elements to reflect current settings
         const elements = {
             bindMoveLeft: document.getElementById("bindMoveLeft"),
             bindMoveRight: document.getElementById("bindMoveRight"),
@@ -228,13 +227,13 @@ export class SettingsMenu {
             bindMoveDown: document.getElementById("bindMoveDown"),
             bindJump: document.getElementById("bindJump"),
             bindMenu: document.getElementById("bindMenu"),
-            volumeSlider: document.getElementById("volumeSlider"),
             volumeLabel: document.getElementById("volumeLabel"),
+            volumeSlider: document.getElementById("volumeSlider"),
             fullscreenToggle: document.getElementById("fullscreenToggle"),
             fpsToggle: document.getElementById("fpsToggle"),
             contrastToggle: document.getElementById("contrastToggle")
         };
-        // Check if all elements exist
+        // Check for missing elements
         const missingElements = Object.entries(elements)
             .filter(([key, element]) => !element)
             .map(([key]) => key);
@@ -242,7 +241,7 @@ export class SettingsMenu {
             console.warn(`Missing elements in updateDisplay: ${missingElements.join(', ')}`);
             return;
         }
-        // Update text content
+        // Update display elements safely
         elements.bindMoveLeft.textContent = this.settings.keyBindings.moveLeft;
         elements.bindMoveRight.textContent = this.settings.keyBindings.moveRight;
         elements.bindMoveUp.textContent = this.settings.keyBindings.moveUp;
@@ -250,7 +249,6 @@ export class SettingsMenu {
         elements.bindJump.textContent = this.settings.keyBindings.jump;
         elements.bindMenu.textContent = this.settings.keyBindings.menu;
         elements.volumeLabel.textContent = this.settings.volume + "%";
-        // Update input values
         elements.volumeSlider.value = this.settings.volume.toString();
         elements.fullscreenToggle.checked = this.settings.fullscreen;
         elements.fpsToggle.checked = this.settings.fpsDisplay;

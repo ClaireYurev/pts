@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS - ECA Scripting & Cutscene Editor Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #00ff00;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: #2a2a2a;
+            border: 1px solid #00ff00;
+            border-bottom: none;
+            cursor: pointer;
+            margin-right: 5px;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: #00ff00;
+            color: #000;
+        }
+
+        .tab:hover {
+            background: #3a3a3a;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background: #2a2a2a;
+            border: 1px solid #00ff00;
+            min-height: 600px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #333;
+            background: #1f1f1f;
+        }
+
+        .section h3 {
+            color: #00ffff;
+            margin-top: 0;
+        }
+
+        canvas {
+            border: 2px solid #00ff00;
+            background: #000;
+            display: block;
+            margin: 10px 0;
+        }
+
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #2a2a2a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #00ff00;
+            color: #000;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input, select, textarea {
+            background: #1a1a1a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .status.success {
+            background: #1a3a1a;
+            border: 1px solid #00ff00;
+        }
+
+        .status.error {
+            background: #3a1a1a;
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .status.warning {
+            background: #3a3a1a;
+            border: 1px solid #ffff00;
+            color: #ffff00;
+        }
+
+        .log {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 PrinceTS - ECA Scripting & Cutscene Editor</h1>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('eca')">ECA Scripting</div>
+            <div class="tab" onclick="switchTab('cutscene')">Cutscene Editor</div>
+            <div class="tab" onclick="switchTab('export')">Export/Import</div>
+            <div class="tab" onclick="switchTab('test')">Test Runner</div>
+        </div>
+
+        <!-- ECA Scripting Tab -->
+        <div id="eca" class="tab-content active">
+            <div class="section">
+                <h3>🎯 Visual Script Editor</h3>
+                <div class="controls">
+                    <button onclick="addEventNode()">Add Event</button>
+                    <button onclick="addConditionNode()">Add Condition</button>
+                    <button onclick="addActionNode()">Add Action</button>
+                    <button onclick="clearScript()">Clear</button>
+                    <button onclick="validateScript()">Validate</button>
+                    <button onclick="runScript()">Run Script</button>
+                </div>
+                <canvas id="ecaCanvas" width="800" height="500"></canvas>
+                <div id="ecaStatus" class="status"></div>
+            </div>
+
+            <div class="grid">
+                <div class="section">
+                    <h3>📝 Script Properties</h3>
+                    <div>
+                        <label>Script ID:</label>
+                        <input type="text" id="scriptId" value="test_script" />
+                    </div>
+                    <div>
+                        <label>Script Name:</label>
+                        <input type="text" id="scriptName" value="Test Script" />
+                    </div>
+                    <div>
+                        <label>Variables:</label>
+                        <textarea id="scriptVariables" rows="4" placeholder='{"score": 0, "lives": 3}'></textarea>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🔧 Node Inspector</h3>
+                    <div id="nodeInspector">
+                        <p>Select a node to edit its properties</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cutscene Editor Tab -->
+        <div id="cutscene" class="tab-content">
+            <div class="section">
+                <h3>🎬 Cutscene Timeline Editor</h3>
+                <div class="controls">
+                    <button onclick="addCameraTrack()">Camera Track</button>
+                    <button onclick="addTextTrack()">Text Track</button>
+                    <button onclick="addSpriteTrack()">Sprite Track</button>
+                    <button onclick="addMusicTrack()">Music Track</button>
+                    <button onclick="playCutscene()">Play</button>
+                    <button onclick="pauseCutscene()">Pause</button>
+                    <button onclick="stopCutscene()">Stop</button>
+                </div>
+                <canvas id="cutsceneCanvas" width="1000" height="400"></canvas>
+                <div id="cutsceneStatus" class="status"></div>
+            </div>
+
+            <div class="grid">
+                <div class="section">
+                    <h3>🎭 Cutscene Properties</h3>
+                    <div>
+                        <label>Cutscene ID:</label>
+                        <input type="text" id="cutsceneId" value="intro_cutscene" />
+                    </div>
+                    <div>
+                        <label>Cutscene Name:</label>
+                        <input type="text" id="cutsceneName" value="Intro Cutscene" />
+                    </div>
+                    <div>
+                        <label>Duration (ms):</label>
+                        <input type="number" id="cutsceneDuration" value="10000" min="1000" max="300000" />
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🎪 Track Inspector</h3>
+                    <div id="trackInspector">
+                        <p>Select a track to edit its properties</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export/Import Tab -->
+        <div id="export" class="tab-content">
+            <div class="section">
+                <h3>📦 Export Game Pack</h3>
+                <div class="controls">
+                    <button onclick="exportGamePack()">Export .ptspack</button>
+                    <button onclick="importGamePack()">Import .ptspack</button>
+                    <button onclick="validateGamePack()">Validate</button>
+                    <button onclick="previewGamePack()">Preview</button>
+                </div>
+                <div id="exportStatus" class="status"></div>
+            </div>
+
+            <div class="grid">
+                <div class="section">
+                    <h3>⚙️ Export Options</h3>
+                    <div>
+                        <input type="checkbox" id="includeAssets" checked />
+                        <label for="includeAssets">Include Assets</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="includeScripts" checked />
+                        <label for="includeScripts">Include Scripts</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="includeCutscenes" checked />
+                        <label for="includeCutscenes">Include Cutscenes</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="includeLevels" checked />
+                        <label for="includeLevels">Include Levels</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="validateSchema" checked />
+                        <label for="validateSchema">Validate Schema</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="compress" checked />
+                        <label for="compress">Compress</label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>📊 Game Pack Info</h3>
+                    <div>
+                        <label>Pack ID:</label>
+                        <input type="text" id="packId" value="demo_pack" />
+                    </div>
+                    <div>
+                        <label>Pack Name:</label>
+                        <input type="text" id="packName" value="Demo Game Pack" />
+                    </div>
+                    <div>
+                        <label>Version:</label>
+                        <input type="text" id="packVersion" value="1.0.0" />
+                    </div>
+                    <div>
+                        <label>Description:</label>
+                        <textarea id="packDescription" rows="3">A demo game pack showcasing ECA scripting and cutscenes</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Runner Tab -->
+        <div id="test" class="tab-content">
+            <div class="section">
+                <h3>🧪 Test Runner</h3>
+                <div class="controls">
+                    <button onclick="runAllTests()">Run All Tests</button>
+                    <button onclick="testECA()">Test ECA</button>
+                    <button onclick="testCutscene()">Test Cutscene</button>
+                    <button onclick="testExport()">Test Export</button>
+                    <button onclick="clearLog()">Clear Log</button>
+                </div>
+                <div id="testLog" class="log"></div>
+            </div>
+
+            <div class="grid">
+                <div class="section">
+                    <h3>📈 Test Results</h3>
+                    <div id="testResults">
+                        <p>No tests run yet</p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🔍 Performance</h3>
+                    <div id="performance">
+                        <p>Performance metrics will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the modules
+        import { ECAScriptEngine, ECAScript } from './src/runtime/scripting/ECA.js';
+        import { VisualScriptEditor } from './src/editor/VisualScriptEditor.js';
+        import { CutsceneEditor } from './src/editor/CutsceneEditor.js';
+        import { CutscenePlayer } from './src/runtime/cutscene/CutscenePlayer.js';
+        import { ExportManager } from './src/editor/ExportManager.js';
+        import { ImportManager } from './src/editor/ImportManager.js';
+
+        // Global variables
+        let ecaEngine;
+        let visualScriptEditor;
+        let cutsceneEditor;
+        let cutscenePlayer;
+        let exportManager;
+        let importManager;
+        let testResults = { passed: 0, failed: 0, total: 0 };
+
+        // Initialize everything
+        async function initialize() {
+            try {
+                log('Initializing PrinceTS ECA & Cutscene System...');
+                
+                // Initialize managers
+                exportManager = new ExportManager();
+                importManager = new ImportManager();
+                
+                // Initialize ECA engine
+                ecaEngine = new ECAScriptEngine({} as any); // Mock engine
+                
+                // Initialize visual script editor
+                const ecaCanvas = document.getElementById('ecaCanvas');
+                visualScriptEditor = new VisualScriptEditor(ecaCanvas);
+                
+                // Initialize cutscene editor
+                const cutsceneCanvas = document.getElementById('cutsceneCanvas');
+                cutsceneEditor = new CutsceneEditor(cutsceneCanvas);
+                
+                log('✅ System initialized successfully');
+                updateStatus('ecaStatus', 'System ready', 'success');
+                
+            } catch (error) {
+                log('❌ Initialization failed: ' + error.message);
+                updateStatus('ecaStatus', 'Initialization failed: ' + error.message, 'error');
+            }
+        }
+
+        // Tab switching
+        window.switchTab = function(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        };
+
+        // ECA Scripting Functions
+        window.addEventNode = function() {
+            try {
+                const script = visualScriptEditor.getScript();
+                const newNode = {
+                    id: 'event_' + Date.now(),
+                    type: 'Event',
+                    kind: 'OnStart',
+                    x: 100,
+                    y: 100,
+                    props: {}
+                };
+                script.nodes.push(newNode);
+                visualScriptEditor.setScript(script);
+                log('✅ Added event node');
+            } catch (error) {
+                log('❌ Failed to add event node: ' + error.message);
+            }
+        };
+
+        window.addConditionNode = function() {
+            try {
+                const script = visualScriptEditor.getScript();
+                const newNode = {
+                    id: 'condition_' + Date.now(),
+                    type: 'Condition',
+                    kind: 'IsAlive',
+                    x: 300,
+                    y: 100,
+                    props: {}
+                };
+                script.nodes.push(newNode);
+                visualScriptEditor.setScript(script);
+                log('✅ Added condition node');
+            } catch (error) {
+                log('❌ Failed to add condition node: ' + error.message);
+            }
+        };
+
+        window.addActionNode = function() {
+            try {
+                const script = visualScriptEditor.getScript();
+                const newNode = {
+                    id: 'action_' + Date.now(),
+                    type: 'Action',
+                    kind: 'Move',
+                    x: 500,
+                    y: 100,
+                    props: { direction: 'right', speed: 100 }
+                };
+                script.nodes.push(newNode);
+                visualScriptEditor.setScript(script);
+                log('✅ Added action node');
+            } catch (error) {
+                log('❌ Failed to add action node: ' + error.message);
+            }
+        };
+
+        window.clearScript = function() {
+            try {
+                const emptyScript = {
+                    id: 'script_' + Date.now(),
+                    name: 'New Script',
+                    nodes: [],
+                    edges: [],
+                    variables: {}
+                };
+                visualScriptEditor.setScript(emptyScript);
+                log('✅ Cleared script');
+            } catch (error) {
+                log('❌ Failed to clear script: ' + error.message);
+            }
+        };
+
+        window.validateScript = function() {
+            try {
+                const script = visualScriptEditor.getScript();
+                const errors = ecaEngine.validateScript(script);
+                
+                if (errors.length === 0) {
+                    updateStatus('ecaStatus', 'Script validation passed', 'success');
+                    log('✅ Script validation passed');
+                } else {
+                    updateStatus('ecaStatus', 'Script validation failed: ' + errors.join(', '), 'error');
+                    log('❌ Script validation failed: ' + errors.join(', '));
+                }
+            } catch (error) {
+                log('❌ Validation error: ' + error.message);
+            }
+        };
+
+        window.runScript = function() {
+            try {
+                const script = visualScriptEditor.getScript();
+                const instance = ecaEngine.createScriptInstance(script);
+                log('✅ Script instance created and running');
+                updateStatus('ecaStatus', 'Script running', 'success');
+            } catch (error) {
+                log('❌ Failed to run script: ' + error.message);
+            }
+        };
+
+        // Cutscene Functions
+        window.addCameraTrack = function() {
+            try {
+                cutsceneEditor.addTrack({
+                    type: 'camera',
+                    name: 'Camera',
+                    color: '#e74c3c',
+                    defaultItems: []
+                });
+                log('✅ Added camera track');
+            } catch (error) {
+                log('❌ Failed to add camera track: ' + error.message);
+            }
+        };
+
+        window.addTextTrack = function() {
+            try {
+                cutsceneEditor.addTrack({
+                    type: 'text',
+                    name: 'Text',
+                    color: '#3498db',
+                    defaultItems: []
+                });
+                log('✅ Added text track');
+            } catch (error) {
+                log('❌ Failed to add text track: ' + error.message);
+            }
+        };
+
+        window.addSpriteTrack = function() {
+            try {
+                cutsceneEditor.addTrack({
+                    type: 'sprite',
+                    name: 'Sprite',
+                    color: '#2ecc71',
+                    defaultItems: []
+                });
+                log('✅ Added sprite track');
+            } catch (error) {
+                log('❌ Failed to add sprite track: ' + error.message);
+            }
+        };
+
+        window.addMusicTrack = function() {
+            try {
+                cutsceneEditor.addTrack({
+                    type: 'music',
+                    name: 'Music',
+                    color: '#9b59b6',
+                    defaultItems: []
+                });
+                log('✅ Added music track');
+            } catch (error) {
+                log('❌ Failed to add music track: ' + error.message);
+            }
+        };
+
+        window.playCutscene = function() {
+            try {
+                const cutscene = cutsceneEditor.getCutscene();
+                cutscenePlayer = new CutscenePlayer(cutscene, {} as any);
+                cutscenePlayer.play();
+                log('✅ Playing cutscene');
+                updateStatus('cutsceneStatus', 'Cutscene playing', 'success');
+            } catch (error) {
+                log('❌ Failed to play cutscene: ' + error.message);
+            }
+        };
+
+        window.pauseCutscene = function() {
+            try {
+                if (cutscenePlayer) {
+                    cutscenePlayer.pause();
+                    log('⏸️ Cutscene paused');
+                    updateStatus('cutsceneStatus', 'Cutscene paused', 'warning');
+                }
+            } catch (error) {
+                log('❌ Failed to pause cutscene: ' + error.message);
+            }
+        };
+
+        window.stopCutscene = function() {
+            try {
+                if (cutscenePlayer) {
+                    cutscenePlayer.stop();
+                    log('⏹️ Cutscene stopped');
+                    updateStatus('cutsceneStatus', 'Cutscene stopped', 'warning');
+                }
+            } catch (error) {
+                log('❌ Failed to stop cutscene: ' + error.message);
+            }
+        };
+
+        // Export/Import Functions
+        window.exportGamePack = async function() {
+            try {
+                const options = {
+                    includeAssets: document.getElementById('includeAssets').checked,
+                    includeScripts: document.getElementById('includeScripts').checked,
+                    includeCutscenes: document.getElementById('includeCutscenes').checked,
+                    includeLevels: document.getElementById('includeLevels').checked,
+                    validateSchema: document.getElementById('validateSchema').checked,
+                    compress: document.getElementById('compress').checked
+                };
+
+                const gamePack = {
+                    id: document.getElementById('packId').value,
+                    name: document.getElementById('packName').value,
+                    version: document.getElementById('packVersion').value,
+                    description: document.getElementById('packDescription').value,
+                    author: 'Demo Author',
+                    levels: {},
+                    scripts: {},
+                    cutscenes: {},
+                    assets: {}
+                };
+
+                // Add current script if available
+                if (options.includeScripts) {
+                    const script = visualScriptEditor.getScript();
+                    gamePack.scripts[script.id] = script;
+                }
+
+                // Add current cutscene if available
+                if (options.includeCutscenes) {
+                    const cutscene = cutsceneEditor.getCutscene();
+                    gamePack.cutscenes[cutscene.id] = cutscene;
+                }
+
+                const result = await exportManager.exportGamePack(gamePack, options);
+                
+                if (result.success) {
+                    updateStatus('exportStatus', `Export successful: ${result.filename} (${result.size} bytes)`, 'success');
+                    log(`✅ Export successful: ${result.filename} (${result.size} bytes)`);
+                } else {
+                    updateStatus('exportStatus', 'Export failed: ' + result.errors.join(', '), 'error');
+                    log('❌ Export failed: ' + result.errors.join(', '));
+                }
+            } catch (error) {
+                log('❌ Export error: ' + error.message);
+            }
+        };
+
+        window.importGamePack = function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.ptspack';
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        const result = await importManager.importFromFile(file);
+                        
+                        if (result.success) {
+                            updateStatus('exportStatus', `Import successful: ${result.importedCount.scripts} scripts, ${result.importedCount.cutscenes} cutscenes`, 'success');
+                            log(`✅ Import successful: ${result.importedCount.scripts} scripts, ${result.importedCount.cutscenes} cutscenes`);
+                        } else {
+                            updateStatus('exportStatus', 'Import failed: ' + result.errors.join(', '), 'error');
+                            log('❌ Import failed: ' + result.errors.join(', '));
+                        }
+                    } catch (error) {
+                        log('❌ Import error: ' + error.message);
+                    }
+                }
+            };
+            input.click();
+        };
+
+        window.validateGamePack = function() {
+            try {
+                const gamePack = {
+                    id: document.getElementById('packId').value,
+                    name: document.getElementById('packName').value,
+                    version: document.getElementById('packVersion').value,
+                    description: document.getElementById('packDescription').value,
+                    author: 'Demo Author',
+                    levels: {},
+                    scripts: {},
+                    cutscenes: {},
+                    assets: {}
+                };
+
+                const errors = importManager.validateGamePack(gamePack);
+                
+                if (errors.length === 0) {
+                    updateStatus('exportStatus', 'Game pack validation passed', 'success');
+                    log('✅ Game pack validation passed');
+                } else {
+                    updateStatus('exportStatus', 'Game pack validation failed: ' + errors.join(', '), 'error');
+                    log('❌ Game pack validation failed: ' + errors.join(', '));
+                }
+            } catch (error) {
+                log('❌ Validation error: ' + error.message);
+            }
+        };
+
+        window.previewGamePack = function() {
+            log('📋 Game pack preview:');
+            log(`  ID: ${document.getElementById('packId').value}`);
+            log(`  Name: ${document.getElementById('packName').value}`);
+            log(`  Version: ${document.getElementById('packVersion').value}`);
+            log(`  Description: ${document.getElementById('packDescription').value}`);
+        };
+
+        // Test Functions
+        window.runAllTests = async function() {
+            log('🧪 Running all tests...');
+            testResults = { passed: 0, failed: 0, total: 0 };
+            
+            await testECA();
+            await testCutscene();
+            await testExport();
+            
+            log(`📊 Test Results: ${testResults.passed}/${testResults.total} passed`);
+            updateTestResults();
+        };
+
+        window.testECA = async function() {
+            log('🧪 Testing ECA System...');
+            testResults.total++;
+            
+            try {
+                // Test script creation
+                const script = {
+                    id: 'test_script',
+                    name: 'Test Script',
+                    nodes: [
+                        {
+                            id: 'event_1',
+                            type: 'Event',
+                            kind: 'OnStart',
+                            x: 100,
+                            y: 100,
+                            props: {}
+                        }
+                    ],
+                    edges: [],
+                    variables: {}
+                };
+
+                const errors = ecaEngine.validateScript(script);
+                if (errors.length === 0) {
+                    log('✅ ECA script validation test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ ECA script validation test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ ECA test error: ' + error.message);
+                testResults.failed++;
+            }
+        };
+
+        window.testCutscene = async function() {
+            log('🧪 Testing Cutscene System...');
+            testResults.total++;
+            
+            try {
+                const cutscene = {
+                    id: 'test_cutscene',
+                    name: 'Test Cutscene',
+                    duration: 5000,
+                    tracks: [],
+                    metadata: {
+                        created: new Date().toISOString(),
+                        editor: 'PrinceTS Cutscene Editor'
+                    }
+                };
+
+                const errors = exportManager.getSchemaErrors('cutscene', cutscene);
+                if (errors.length === 0) {
+                    log('✅ Cutscene validation test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ Cutscene validation test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ Cutscene test error: ' + error.message);
+                testResults.failed++;
+            }
+        };
+
+        window.testExport = async function() {
+            log('🧪 Testing Export System...');
+            testResults.total++;
+            
+            try {
+                const gamePack = {
+                    id: 'test_pack',
+                    name: 'Test Pack',
+                    version: '1.0.0',
+                    description: 'Test pack',
+                    author: 'Test Author',
+                    levels: {},
+                    scripts: {},
+                    cutscenes: {},
+                    assets: {}
+                };
+
+                const errors = importManager.validateGamePack(gamePack);
+                if (errors.length === 0) {
+                    log('✅ Export validation test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ Export validation test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ Export test error: ' + error.message);
+                testResults.failed++;
+            }
+        };
+
+        window.clearLog = function() {
+            document.getElementById('testLog').innerHTML = '';
+        };
+
+        // Utility Functions
+        function log(message) {
+            const logElement = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+
+        function updateTestResults() {
+            const resultsElement = document.getElementById('testResults');
+            const percentage = testResults.total > 0 ? Math.round((testResults.passed / testResults.total) * 100) : 0;
+            
+            resultsElement.innerHTML = `
+                <p><strong>Total Tests:</strong> ${testResults.total}</p>
+                <p><strong>Passed:</strong> <span style="color: #00ff00;">${testResults.passed}</span></p>
+                <p><strong>Failed:</strong> <span style="color: #ff0000;">${testResults.failed}</span></p>
+                <p><strong>Success Rate:</strong> <span style="color: #00ffff;">${percentage}%</span></p>
+            `;
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html> 

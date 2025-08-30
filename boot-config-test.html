@@ -3,197 +3,629 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>URL Boot Config Test</title>
+    <title>BootConfig Test - PTS</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
-            background: #f0f0f0;
         }
-        .test-section {
-            background: white;
-            margin: 20px 0;
-            padding: 20px;
+        
+        h1 {
+            color: #ffff00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .section {
+            background: #2a2a2a;
+            border: 1px solid #444;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
         }
-        .test-link {
-            display: inline-block;
-            margin: 10px;
-            padding: 10px 15px;
-            background: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
+        
+        .section h2 {
+            color: #00ffff;
+            margin-top: 0;
         }
-        .test-link:hover {
-            background: #0056b3;
+        
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
-        .description {
-            color: #666;
-            font-size: 14px;
+        
+        .param-group {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #00ff00;
+        }
+        
+        .param-group h3 {
+            color: #ffff00;
+            margin-top: 0;
             margin-bottom: 10px;
         }
-        h1 {
-            color: #333;
+        
+        .param-item {
+            margin-bottom: 8px;
+        }
+        
+        .param-item label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        
+        .param-item input, .param-item select {
+            background: #1a1a1a;
+            border: 1px solid #555;
+            color: #00ff00;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+        
+        .param-item input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .buttons {
             text-align: center;
+            margin: 20px 0;
         }
-        h2 {
-            color: #555;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 5px;
+        
+        .btn {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
         }
+        
+        .btn:hover {
+            background: #0088ff;
+        }
+        
+        .btn.copy {
+            background: #cc6600;
+        }
+        
+        .btn.copy:hover {
+            background: #ff8800;
+        }
+        
         .url-display {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 4px;
+            background: #1a1a1a;
+            border: 1px solid #555;
+            padding: 15px;
+            border-radius: 5px;
             font-family: monospace;
-            font-size: 12px;
             word-break: break-all;
-            margin: 10px 0;
+            margin: 20px 0;
+        }
+        
+        .current-config {
+            background: #1a1a1a;
+            border: 1px solid #555;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .info {
+            background: #2a2a2a;
+            border-left: 4px solid #0088ff;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .warning {
+            background: #2a2a2a;
+            border-left: 4px solid #ff8800;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .success {
+            background: #2a2a2a;
+            border-left: 4px solid #00ff00;
+            padding: 15px;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
-    <h1>URL Boot Config Test</h1>
-    
-    <div class="test-section">
-        <h2>Basic Game State</h2>
-        <div class="description">Test basic game state parameters like level, health, and position.</div>
+    <div class="container">
+        <h1>🎮 PTS BootConfig Test</h1>
         
-        <a href="index.html?level=3&health=50&x=100&y=200" class="test-link">Level 3, Health 50, Position (100,200)</a>
-        <a href="index.html?level=7&health=25&time=300" class="test-link">Level 7, Health 25, Time 300</a>
-        <a href="index.html?level=1&health=100&sword=1" class="test-link">Level 1, Full Health, Sword</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Cheats & Debug</h2>
-        <div class="description">Test various cheat codes and debug features.</div>
+        <div class="info">
+            <strong>BootConfig System:</strong> This test demonstrates the URL-based boot configuration system with proper precedence handling:
+            <br>Engine defaults → Pack defaults → SettingsStore → URL (wins for session)
+        </div>
         
-        <a href="index.html?noclip=1&god=1" class="test-link">NoClip + God Mode</a>
-        <a href="index.html?infTime=1&givesword=1" class="test-link">Infinite Time + Give Sword</a>
-        <a href="index.html?noclip=1&god=1&infTime=1&reveal=1" class="test-link">All Cheats Enabled</a>
-        <a href="index.html?setguards=5" class="test-link">Set Guards to 5</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Video & Audio Settings</h2>
-        <div class="description">Test video and audio configuration parameters.</div>
-        
-        <a href="index.html?scale=fit&fps=120&fullscreen=1" class="test-link">Fit Scale, 120 FPS, Fullscreen</a>
-        <a href="index.html?scale=stretch&zoom=2.0" class="test-link">Stretch Scale, 2x Zoom</a>
-        <a href="index.html?mute=1&music=0&sfx=1" class="test-link">Muted, No Music, SFX On</a>
-        <a href="index.html?vol=0.5&latency=low" class="test-link">50% Volume, Low Latency</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Input & Accessibility</h2>
-        <div class="description">Test input and accessibility settings.</div>
-        
-        <a href="index.html?deadzone=0.2&jumpbuf=100&sticky=1" class="test-link">Deadzone 20%, Jump Buffer 100ms, Sticky</a>
-        <a href="index.html?hud=0&cutscenes=0" class="test-link">No HUD, Skip Cutscenes</a>
-        <a href="index.html?lang=es" class="test-link">Spanish Language</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Save Slots</h2>
-        <div class="description">Test loading from different save slots.</div>
-        
-        <a href="index.html?slot=1" class="test-link">Load Save Slot 1</a>
-        <a href="index.html?slot=2" class="test-link">Load Save Slot 2</a>
-        <a href="index.html?slot=3" class="test-link">Load Save Slot 3</a>
-        <a href="index.html?slot=Q" class="test-link">Quick Save Slot</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Performance & Advanced</h2>
-        <div class="description">Test performance and advanced configuration options.</div>
-        
-        <a href="index.html?speed=2.0&vsync=0" class="test-link">2x Speed, No VSync</a>
-        <a href="index.html?seed=12345&difficulty=hard" class="test-link">Seed 12345, Hard Difficulty</a>
-        <a href="index.html?editor=1" class="test-link">Editor Mode</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Complex Combinations</h2>
-        <div class="description">Test complex parameter combinations that might be used in real scenarios.</div>
-        
-        <a href="index.html?pack=snes&level=3&health=75&time=180&noclip=1&god=1&music=0&scale=integer&fps=60&jumpbuf=80" class="test-link">Speedrun Setup</a>
-        <a href="index.html?packUrl=https://example.com/game.ptspack&editor=1" class="test-link">External Pack + Editor</a>
-        <a href="index.html?slot=2&mute=1&hud=0&cutscenes=0" class="test-link">Silent Playthrough</a>
-    </div>
-
-    <div class="test-section">
-        <h2>Current URL Analysis</h2>
-        <div class="description">Display and analyze the current URL parameters.</div>
-        
-        <div class="url-display" id="currentUrl"></div>
-        <div id="urlAnalysis"></div>
-        
-        <script>
-            function analyzeCurrentUrl() {
-                const url = window.location.href;
-                const urlDisplay = document.getElementById('currentUrl');
-                const analysis = document.getElementById('urlAnalysis');
+        <div class="section">
+            <h2>🔧 Boot Parameters</h2>
+            <div class="param-grid">
+                <!-- Game Pack & Level -->
+                <div class="param-group">
+                    <h3>📦 Game Pack & Level</h3>
+                    <div class="param-item">
+                        <label>Pack:</label>
+                        <input type="text" id="pack" placeholder="Built-in pack name">
+                    </div>
+                    <div class="param-item">
+                        <label>Pack URL:</label>
+                        <input type="url" id="packUrl" placeholder="https://...">
+                    </div>
+                    <div class="param-item">
+                        <label>Level:</label>
+                        <input type="number" id="level" min="1" max="999" value="1">
+                    </div>
+                    <div class="param-item">
+                        <label>Room:</label>
+                        <input type="number" id="room" min="1" max="999">
+                    </div>
+                    <div class="param-item">
+                        <label>X Position:</label>
+                        <input type="number" id="x" step="0.1">
+                    </div>
+                    <div class="param-item">
+                        <label>Y Position:</label>
+                        <input type="number" id="y" step="0.1">
+                    </div>
+                </div>
                 
-                urlDisplay.textContent = url;
+                <!-- Player State -->
+                <div class="param-group">
+                    <h3>👤 Player State</h3>
+                    <div class="param-item">
+                        <label>Health:</label>
+                        <input type="number" id="health" min="0" max="9999" value="100">
+                    </div>
+                    <div class="param-item">
+                        <label>Max Health:</label>
+                        <input type="number" id="maxhealth" min="1" max="9999" value="100">
+                    </div>
+                    <div class="param-item">
+                        <label>Sword:</label>
+                        <input type="checkbox" id="sword">
+                    </div>
+                </div>
                 
-                const params = new URLSearchParams(window.location.search);
-                if (params.toString()) {
-                    let analysisText = '<h3>Parameters Found:</h3><ul>';
-                    for (const [key, value] of params) {
-                        analysisText += `<li><strong>${key}:</strong> ${value}</li>`;
-                    }
-                    analysisText += '</ul>';
-                    analysis.innerHTML = analysisText;
-                } else {
-                    analysis.innerHTML = '<p>No URL parameters found. This is the default boot configuration.</p>';
-                }
-            }
+                <!-- Game Settings -->
+                <div class="param-group">
+                    <h3>🎮 Game Settings</h3>
+                    <div class="param-item">
+                        <label>Time:</label>
+                        <input type="number" id="time" min="0" max="999999">
+                    </div>
+                    <div class="param-item">
+                        <label>Seed:</label>
+                        <input type="number" id="seed" min="0" max="999999">
+                    </div>
+                    <div class="param-item">
+                        <label>Difficulty:</label>
+                        <select id="difficulty">
+                            <option value="">Default</option>
+                            <option value="easy">Easy</option>
+                            <option value="normal">Normal</option>
+                            <option value="hard">Hard</option>
+                            <option value="extreme">Extreme</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Cheats -->
+                <div class="param-group">
+                    <h3>🛠️ Cheats</h3>
+                    <div class="param-item">
+                        <label>Noclip:</label>
+                        <input type="checkbox" id="noclip">
+                    </div>
+                    <div class="param-item">
+                        <label>God Mode:</label>
+                        <input type="checkbox" id="god">
+                    </div>
+                    <div class="param-item">
+                        <label>Infinite Time:</label>
+                        <input type="checkbox" id="infTime">
+                    </div>
+                    <div class="param-item">
+                        <label>Reveal:</label>
+                        <input type="checkbox" id="reveal">
+                    </div>
+                    <div class="param-item">
+                        <label>Give Sword:</label>
+                        <input type="checkbox" id="givesword">
+                    </div>
+                    <div class="param-item">
+                        <label>Set Guards:</label>
+                        <input type="number" id="setguards" min="0" max="100">
+                    </div>
+                </div>
+                
+                <!-- Performance -->
+                <div class="param-group">
+                    <h3>⚡ Performance</h3>
+                    <div class="param-item">
+                        <label>Speed:</label>
+                        <input type="number" id="speed" min="0.1" max="10.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="param-item">
+                        <label>FPS:</label>
+                        <input type="number" id="fps" min="30" max="240" value="60">
+                    </div>
+                    <div class="param-item">
+                        <label>VSync:</label>
+                        <input type="checkbox" id="vsync" checked>
+                    </div>
+                </div>
+                
+                <!-- Display -->
+                <div class="param-group">
+                    <h3>🖥️ Display</h3>
+                    <div class="param-item">
+                        <label>Scale:</label>
+                        <select id="scale">
+                            <option value="">Default</option>
+                            <option value="integer">Integer</option>
+                            <option value="fit">Fit</option>
+                            <option value="stretch">Stretch</option>
+                        </select>
+                    </div>
+                    <div class="param-item">
+                        <label>Zoom:</label>
+                        <input type="number" id="zoom" min="0.1" max="10.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="param-item">
+                        <label>Fullscreen:</label>
+                        <input type="checkbox" id="fullscreen">
+                    </div>
+                </div>
+                
+                <!-- Audio -->
+                <div class="param-group">
+                    <h3>🔊 Audio</h3>
+                    <div class="param-item">
+                        <label>Mute:</label>
+                        <input type="checkbox" id="mute">
+                    </div>
+                    <div class="param-item">
+                        <label>Music:</label>
+                        <input type="checkbox" id="music" checked>
+                    </div>
+                    <div class="param-item">
+                        <label>SFX:</label>
+                        <input type="checkbox" id="sfx" checked>
+                    </div>
+                    <div class="param-item">
+                        <label>Volume:</label>
+                        <input type="number" id="vol" min="0.0" max="1.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="param-item">
+                        <label>Latency:</label>
+                        <select id="latency">
+                            <option value="">Default</option>
+                            <option value="auto">Auto</option>
+                            <option value="low">Low</option>
+                            <option value="compat">Compat</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Input -->
+                <div class="param-group">
+                    <h3>🎮 Input</h3>
+                    <div class="param-item">
+                        <label>Keys:</label>
+                        <input type="text" id="keys" placeholder="Custom key bindings">
+                    </div>
+                    <div class="param-item">
+                        <label>Deadzone:</label>
+                        <input type="number" id="deadzone" min="0.0" max="1.0" step="0.1" value="0.1">
+                    </div>
+                    <div class="param-item">
+                        <label>Jump Buffer:</label>
+                        <input type="number" id="jumpbuf" min="0" max="200" value="100">
+                    </div>
+                    <div class="param-item">
+                        <label>Sticky:</label>
+                        <input type="checkbox" id="sticky">
+                    </div>
+                </div>
+                
+                <!-- UI & Accessibility -->
+                <div class="param-group">
+                    <h3>🎨 UI & Accessibility</h3>
+                    <div class="param-item">
+                        <label>HUD:</label>
+                        <input type="checkbox" id="hud" checked>
+                    </div>
+                    <div class="param-item">
+                        <label>Cutscenes:</label>
+                        <input type="checkbox" id="cutscenes">
+                    </div>
+                    <div class="param-item">
+                        <label>Language:</label>
+                        <input type="text" id="lang" placeholder="en" value="en">
+                    </div>
+                    <div class="param-item">
+                        <label>Save Slot:</label>
+                        <select id="slot">
+                            <option value="">No slot</option>
+                            <option value="1">Slot 1</option>
+                            <option value="2">Slot 2</option>
+                            <option value="3">Slot 3</option>
+                            <option value="Q">Quick Save</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Development -->
+                <div class="param-group">
+                    <h3>🔧 Development</h3>
+                    <div class="param-item">
+                        <label>Editor:</label>
+                        <input type="checkbox" id="editor">
+                    </div>
+                </div>
+            </div>
             
-            // Analyze URL on page load
-            analyzeCurrentUrl();
-            
-            // Add click handlers to show URL before navigation
-            document.querySelectorAll('.test-link').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const url = link.href;
-                    if (confirm(`Navigate to:\n${url}\n\nThis will test the URL boot configuration system.`)) {
-                        window.location.href = url;
-                    }
-                });
-            });
-        </script>
-    </div>
-
-    <div class="test-section">
-        <h2>Implementation Notes</h2>
-        <div class="description">
-            <p><strong>URL Boot Config System Features:</strong></p>
-            <ul>
-                <li><strong>30+ Parameters:</strong> Support for pack, level, health, cheats, video/audio/input settings</li>
-                <li><strong>Precedence:</strong> Engine defaults → Pack defaults → SettingsStore → URL (wins for session)</li>
-                <li><strong>Default Boot:</strong> Level 1 by default, skipping cutscenes, muted until input</li>
-                <li><strong>Validation:</strong> Parameter validation with warnings for invalid values</li>
-                <li><strong>Copy Boot Link:</strong> π menu button to copy current non-default settings as URL</li>
-            </ul>
-            
-            <p><strong>Key Parameters:</strong></p>
-            <ul>
-                <li><code>pack</code> - Built-in pack name</li>
-                <li><code>packUrl</code> - External pack URL</li>
-                <li><code>level</code> - Starting level (default: 1)</li>
-                <li><code>health</code> - Player health</li>
-                <li><code>noclip</code>, <code>god</code>, <code>infTime</code> - Cheat codes</li>
-                <li><code>scale</code> - Display scaling (integer/fit/stretch)</li>
-                <li><code>mute</code>, <code>vol</code> - Audio settings</li>
-                <li><code>slot</code> - Save slot to load (1/2/3/Q)</li>
-            </ul>
+            <div class="buttons">
+                <button class="btn" onclick="generateUrl()">🔗 Generate Boot URL</button>
+                <button class="btn copy" onclick="copyUrl()">📋 Copy Boot Link</button>
+                <button class="btn" onclick="loadFromUrl()">📥 Load from URL</button>
+                <button class="btn" onclick="resetForm()">🔄 Reset Form</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🔗 Generated Boot URL</h2>
+            <div class="url-display" id="urlDisplay">
+                Click "Generate Boot URL" to create a boot link with your settings
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📊 Current Configuration</h2>
+            <div class="current-config" id="currentConfig">
+                No configuration loaded
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📝 Examples</h2>
+            <div class="param-grid">
+                <div class="param-group">
+                    <h3>🎯 Quick Start</h3>
+                    <p><code>?level=3&health=200&god=1</code></p>
+                    <p>Start at level 3 with 200 health and god mode</p>
+                </div>
+                <div class="param-group">
+                    <h3>🎮 Speed Run</h3>
+                    <p><code>?speed=2.0&noclip=1&cutscenes=0</code></p>
+                    <p>2x speed, noclip, skip cutscenes</p>
+                </div>
+                <div class="param-group">
+                    <h3>🔧 Debug Mode</h3>
+                    <p><code>?god=1&noclip=1&infTime=1&editor=1</code></p>
+                    <p>All cheats enabled + editor mode</p>
+                </div>
+                <div class="param-group">
+                    <h3>🎵 Audio Test</h3>
+                    <p><code>?vol=0.5&music=0&sfx=1</code></p>
+                    <p>50% volume, no music, SFX only</p>
+                </div>
+            </div>
         </div>
     </div>
+
+    <script type="module">
+        import { parseBootConfig, validateBootConfig, resolveBootConfig, generateBootLink } from './src/engine/boot/BootConfig.js';
+        
+        // Global functions for the UI
+        window.generateUrl = function() {
+            const params = new URLSearchParams();
+            
+            // Collect all form values
+            const formData = {
+                pack: document.getElementById('pack').value,
+                packUrl: document.getElementById('packUrl').value,
+                level: document.getElementById('level').value,
+                room: document.getElementById('room').value,
+                x: document.getElementById('x').value,
+                y: document.getElementById('y').value,
+                health: document.getElementById('health').value,
+                maxhealth: document.getElementById('maxhealth').value,
+                sword: document.getElementById('sword').checked,
+                time: document.getElementById('time').value,
+                seed: document.getElementById('seed').value,
+                difficulty: document.getElementById('difficulty').value,
+                noclip: document.getElementById('noclip').checked,
+                god: document.getElementById('god').checked,
+                infTime: document.getElementById('infTime').checked,
+                reveal: document.getElementById('reveal').checked,
+                givesword: document.getElementById('givesword').checked,
+                setguards: document.getElementById('setguards').value,
+                speed: document.getElementById('speed').value,
+                fps: document.getElementById('fps').value,
+                vsync: document.getElementById('vsync').checked,
+                scale: document.getElementById('scale').value,
+                zoom: document.getElementById('zoom').value,
+                fullscreen: document.getElementById('fullscreen').checked,
+                mute: document.getElementById('mute').checked,
+                music: document.getElementById('music').checked,
+                sfx: document.getElementById('sfx').checked,
+                vol: document.getElementById('vol').value,
+                latency: document.getElementById('latency').value,
+                keys: document.getElementById('keys').value,
+                deadzone: document.getElementById('deadzone').value,
+                jumpbuf: document.getElementById('jumpbuf').value,
+                sticky: document.getElementById('sticky').checked,
+                hud: document.getElementById('hud').checked,
+                cutscenes: document.getElementById('cutscenes').checked,
+                lang: document.getElementById('lang').value,
+                slot: document.getElementById('slot').value,
+                editor: document.getElementById('editor').checked
+            };
+            
+            // Add non-empty values to URL params
+            Object.entries(formData).forEach(([key, value]) => {
+                if (value !== '' && value !== false && value !== '0') {
+                    if (typeof value === 'boolean') {
+                        params.set(key, '1');
+                    } else {
+                        params.set(key, value.toString());
+                    }
+                }
+            });
+            
+            const queryString = params.toString();
+            const bootUrl = queryString ? 
+                `${window.location.origin}${window.location.pathname}?${queryString}` : 
+                `${window.location.origin}${window.location.pathname}`;
+            
+            document.getElementById('urlDisplay').textContent = bootUrl;
+            
+            // Show current configuration
+            try {
+                const { config, warnings } = parseBootConfig();
+                const validationWarnings = validateBootConfig(config);
+                const resolvedConfig = resolveBootConfig(config);
+                
+                let configText = 'Parsed URL Configuration:\n';
+                configText += JSON.stringify(config, null, 2);
+                configText += '\n\nResolved Configuration (with precedence):\n';
+                configText += JSON.stringify(resolvedConfig, null, 2);
+                
+                if (warnings.length > 0 || validationWarnings.length > 0) {
+                    configText += '\n\nWarnings:\n';
+                    [...warnings, ...validationWarnings].forEach(warning => {
+                        configText += `⚠️ ${warning}\n`;
+                    });
+                }
+                
+                document.getElementById('currentConfig').textContent = configText;
+            } catch (error) {
+                document.getElementById('currentConfig').textContent = `Error parsing configuration: ${error.message}`;
+            }
+        };
+        
+        window.copyUrl = async function() {
+            const urlDisplay = document.getElementById('urlDisplay');
+            const url = urlDisplay.textContent;
+            
+            if (url && url !== 'Click "Generate Boot URL" to create a boot link with your settings') {
+                try {
+                    await navigator.clipboard.writeText(url);
+                    showMessage('✅ Boot link copied to clipboard!', 'success');
+                } catch (error) {
+                    showMessage('❌ Failed to copy to clipboard', 'warning');
+                }
+            } else {
+                showMessage('⚠️ Generate a URL first', 'warning');
+            }
+        };
+        
+        window.loadFromUrl = function() {
+            try {
+                const { config } = parseBootConfig();
+                
+                // Populate form with URL parameters
+                Object.entries(config).forEach(([key, value]) => {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.checked = Boolean(value);
+                        } else {
+                            element.value = value.toString();
+                        }
+                    }
+                });
+                
+                showMessage('✅ Configuration loaded from URL', 'success');
+            } catch (error) {
+                showMessage(`❌ Error loading from URL: ${error.message}`, 'warning');
+            }
+        };
+        
+        window.resetForm = function() {
+            // Reset all form elements to defaults
+            document.getElementById('level').value = '1';
+            document.getElementById('health').value = '100';
+            document.getElementById('maxhealth').value = '100';
+            document.getElementById('sword').checked = false;
+            document.getElementById('noclip').checked = false;
+            document.getElementById('god').checked = false;
+            document.getElementById('infTime').checked = false;
+            document.getElementById('reveal').checked = false;
+            document.getElementById('givesword').checked = false;
+            document.getElementById('speed').value = '1.0';
+            document.getElementById('fps').value = '60';
+            document.getElementById('vsync').checked = true;
+            document.getElementById('zoom').value = '1.0';
+            document.getElementById('mute').checked = false;
+            document.getElementById('music').checked = true;
+            document.getElementById('sfx').checked = true;
+            document.getElementById('vol').value = '1.0';
+            document.getElementById('deadzone').value = '0.1';
+            document.getElementById('jumpbuf').value = '100';
+            document.getElementById('sticky').checked = false;
+            document.getElementById('hud').checked = true;
+            document.getElementById('cutscenes').checked = false;
+            document.getElementById('lang').value = 'en';
+            document.getElementById('editor').checked = false;
+            
+            // Clear text inputs
+            ['pack', 'packUrl', 'room', 'x', 'y', 'time', 'seed', 'setguards', 'keys'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            
+            // Reset selects
+            ['difficulty', 'scale', 'latency', 'slot'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            
+            showMessage('🔄 Form reset to defaults', 'info');
+        };
+        
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(messageDiv, container.firstChild);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+        
+        // Load configuration from URL on page load
+        window.addEventListener('load', () => {
+            if (window.location.search) {
+                window.loadFromUrl();
+                window.generateUrl();
+            }
+        });
+    </script>
 </body>
 </html> 

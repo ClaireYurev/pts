@@ -60,6 +60,10 @@ export declare class EditorApp {
     private closePlaytest;
     private loadLevel;
     private updateStatus;
+    private saveLevel;
+    private loadLevelFromFile;
+    private handleKeyboardShortcuts;
+    private handleWindowResize;
     getCurrentLevel(): LevelData;
     getSelectedEntity(): EntityData | null;
     updateEntity(entity: EntityData): void;

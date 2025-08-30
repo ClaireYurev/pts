@@ -1,96 +1,136 @@
-import { Vec2 } from '../engine/Vector2.js';
+export interface CameraState {
+    x: number;
+    y: number;
+    zoom: number;
+    targetX: number;
+    targetY: number;
+    isFollowing: boolean;
+}
 export interface FreeCameraConfig {
-    enabled?: boolean;
-    speed?: number;
-    acceleration?: number;
-    maxSpeed?: number;
-    bounds?: {
-        minX: number;
-        maxX: number;
-        minY: number;
-        maxY: number;
-    };
+    panSpeed: number;
+    zoomSpeed: number;
+    maxZoom: number;
+    minZoom: number;
+    smoothFollow: boolean;
+    followSpeed: number;
 }
 export declare class FreeCamera {
-    private enabled;
-    private position;
-    private velocity;
-    private target;
+    private state;
     private config;
+    private _isEnabled;
+    private isActive;
     private keys;
-    constructor(config?: FreeCameraConfig);
+    private targetEntity;
+    constructor();
     /**
      * Enable/disable free camera
      */
     setEnabled(enabled: boolean): void;
     /**
-     * Check if free camera is enabled
+     * Get enabled state
      */
     isEnabled(): boolean;
+    /**
+     * Toggle free camera mode
+     */
+    toggle(): void;
+    /**
+     * Update camera position and state
+     */
+    update(deltaTime: number): void;
     /**
      * Set camera position
      */
     setPosition(x: number, y: number): void;
     /**
-     * Get current camera position
+     * Set camera zoom
      */
-    getPosition(): Vec2;
+    setZoom(zoom: number): void;
     /**
-     * Set camera target (for smooth movement)
+     * Set target entity for following
      */
-    setTarget(x: number, y: number): void;
+    setTarget(entity: any): void;
     /**
-     * Get camera target
+     * Get current camera state
      */
-    getTarget(): Vec2;
+    getState(): CameraState;
     /**
-     * Handle key press
+     * Get camera position
      */
-    onKeyDown(key: string): void;
+    getPosition(): {
+        x: number;
+        y: number;
+    };
     /**
-     * Handle key release
+     * Get camera zoom
      */
-    onKeyUp(key: string): void;
+    getZoom(): number;
     /**
-     * Update camera movement
+     * Check if free camera is active
      */
-    update(deltaTime: number): void;
+    isFreeCameraActive(): boolean;
     /**
-     * Linear interpolation helper
+     * Check if camera should follow target
      */
-    private lerp;
+    shouldFollowTarget(): boolean;
     /**
-     * Set camera bounds
+     * Update camera to follow target entity
      */
-    setBounds(bounds: {
-        minX: number;
-        maxX: number;
-        minY: number;
-        maxY: number;
-    }): void;
+    updateFollowTarget(deltaTime: number): void;
     /**
-     * Clear camera bounds
+     * Handle keyboard input for camera movement
      */
-    clearBounds(): void;
+    private handleKeyboardInput;
     /**
-     * Set camera speed
+     * Handle mouse input for camera movement
      */
-    setSpeed(speed: number): void;
+    private handleMouseInput;
     /**
-     * Set camera acceleration
+     * Setup input handling
      */
-    setAcceleration(acceleration: number): void;
+    private setupInputHandling;
     /**
-     * Set max speed
+     * Check if key is used for camera control
      */
-    setMaxSpeed(maxSpeed: number): void;
+    private isCameraKey;
     /**
-     * Get debug info
+     * Reset camera to default position
      */
-    getDebugInfo(): Record<string, any>;
+    private resetCamera;
     /**
-     * Reset camera to origin
+     * Center camera on target entity
      */
-    reset(): void;
+    private centerOnTarget;
+    /**
+     * Get camera configuration
+     */
+    getConfig(): FreeCameraConfig;
+    /**
+     * Set camera configuration
+     */
+    setConfig(config: Partial<FreeCameraConfig>): void;
+    /**
+     * Get camera bounds (useful for UI positioning)
+     */
+    getCameraBounds(): {
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+    };
+    /**
+     * Convert screen coordinates to world coordinates
+     */
+    screenToWorld(screenX: number, screenY: number): {
+        x: number;
+        y: number;
+    };
+    /**
+     * Convert world coordinates to screen coordinates
+     */
+    worldToScreen(worldX: number, worldY: number): {
+        x: number;
+        y: number;
+    };
 }
 //# sourceMappingURL=FreeCamera.d.ts.map

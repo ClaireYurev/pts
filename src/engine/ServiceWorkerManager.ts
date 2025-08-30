@@ -2,8 +2,13 @@ export interface ServiceWorkerConfig {
     enabled: boolean;
     cacheStaticAssets: boolean;
     cacheGamePacks: boolean;
+    cacheBuiltIns: boolean;
+    cacheInstalledPacks: boolean;
     backgroundSync: boolean;
     pushNotifications: boolean;
+    cacheStrategy: 'cache-first' | 'network-first' | 'stale-while-revalidate';
+    maxCacheSize: number; // in MB
+    cacheExpiration: number; // in days
 }
 
 export class ServiceWorkerManager {
@@ -12,8 +17,22 @@ export class ServiceWorkerManager {
         enabled: true,
         cacheStaticAssets: true,
         cacheGamePacks: true,
+        cacheBuiltIns: true,
+        cacheInstalledPacks: true,
         backgroundSync: false,
-        pushNotifications: false
+        pushNotifications: false,
+        cacheStrategy: 'cache-first',
+        maxCacheSize: 100, // 100MB
+        cacheExpiration: 30 // 30 days
+    };
+
+    // Cache management
+    private static readonly CACHE_NAMES = {
+        STATIC: 'prince-ts-static-v2',
+        DYNAMIC: 'prince-ts-dynamic-v2',
+        BUILTINS: 'prince-ts-builtins-v2',
+        INSTALLED: 'prince-ts-installed-v2',
+        GAME_PACKS: 'prince-ts-gamepacks-v2'
     };
 
     constructor(config?: Partial<ServiceWorkerConfig>) {
@@ -110,23 +129,195 @@ export class ServiceWorkerManager {
         }
     }
 
-    public async getCacheInfo(): Promise<any> {
-        return new Promise((resolve) => {
-            if (!navigator.serviceWorker.controller) {
-                resolve(null);
-                return;
+    // Enhanced cache management
+    public async cacheBuiltInPacks(packs: string[]): Promise<boolean> {
+        if (!this.config.cacheBuiltIns || !this.registration) {
+            return false;
+        }
+
+        try {
+            const cache = await caches.open(ServiceWorkerManager.CACHE_NAMES.BUILTINS);
+            const cachePromises = packs.map(async (packUrl) => {
+                try {
+                    const response = await fetch(packUrl);
+                    if (response.ok) {
+                        await cache.put(packUrl, response.clone());
+                        console.log(`ServiceWorker: Cached built-in pack: ${packUrl}`);
+                    }
+                } catch (error) {
+                    console.warn(`ServiceWorker: Failed to cache built-in pack: ${packUrl}`, error);
+                }
+            });
+
+            await Promise.all(cachePromises);
+            console.log(`ServiceWorker: Cached ${packs.length} built-in packs`);
+            return true;
+        } catch (error) {
+            console.error('ServiceWorker: Failed to cache built-in packs:', error);
+            return false;
+        }
+    }
+
+    public async cacheInstalledPack(packUrl: string, packData: any): Promise<boolean> {
+        if (!this.config.cacheInstalledPacks || !this.registration) {
+            return false;
+        }
+
+        try {
+            const cache = await caches.open(ServiceWorkerManager.CACHE_NAMES.INSTALLED);
+            
+            // Cache the pack file
+            const packResponse = await fetch(packUrl);
+            if (packResponse.ok) {
+                await cache.put(packUrl, packResponse.clone());
             }
 
-            const channel = new MessageChannel();
-            channel.port1.onmessage = (event) => {
-                resolve(event.data);
-            };
+            // Cache pack metadata
+            const metadataUrl = `${packUrl}.metadata`;
+            const metadataResponse = new Response(JSON.stringify(packData), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            await cache.put(metadataUrl, metadataResponse);
 
-            navigator.serviceWorker.controller.postMessage(
-                { type: 'GET_CACHE_INFO' },
-                [channel.port2]
-            );
-        });
+            console.log(`ServiceWorker: Cached installed pack: ${packUrl}`);
+            return true;
+        } catch (error) {
+            console.error(`ServiceWorker: Failed to cache installed pack: ${packUrl}`, error);
+            return false;
+        }
+    }
+
+    public async removeInstalledPack(packUrl: string): Promise<boolean> {
+        if (!this.registration) return false;
+
+        try {
+            const cache = await caches.open(ServiceWorkerManager.CACHE_NAMES.INSTALLED);
+            await cache.delete(packUrl);
+            await cache.delete(`${packUrl}.metadata`);
+            console.log(`ServiceWorker: Removed installed pack from cache: ${packUrl}`);
+            return true;
+        } catch (error) {
+            console.error(`ServiceWorker: Failed to remove installed pack: ${packUrl}`, error);
+            return false;
+        }
+    }
+
+    public async getCacheInfo(): Promise<{
+        staticSize: number;
+        dynamicSize: number;
+        builtinsSize: number;
+        installedSize: number;
+        gamePacksSize: number;
+        totalSize: number;
+        cacheNames: string[];
+    }> {
+        const cacheNames = Object.values(ServiceWorkerManager.CACHE_NAMES);
+        const sizes: Record<string, number> = {};
+
+        for (const cacheName of cacheNames) {
+            try {
+                const cache = await caches.open(cacheName);
+                const keys = await cache.keys();
+                let size = 0;
+
+                for (const request of keys) {
+                    const response = await cache.match(request);
+                    if (response) {
+                        const blob = await response.blob();
+                        size += blob.size;
+                    }
+                }
+
+                sizes[cacheName] = size;
+            } catch (error) {
+                console.warn(`ServiceWorker: Failed to get cache size for ${cacheName}:`, error);
+                sizes[cacheName] = 0;
+            }
+        }
+
+        const totalSize = Object.values(sizes).reduce((sum, size) => sum + size, 0);
+
+        return {
+            staticSize: sizes[ServiceWorkerManager.CACHE_NAMES.STATIC] || 0,
+            dynamicSize: sizes[ServiceWorkerManager.CACHE_NAMES.DYNAMIC] || 0,
+            builtinsSize: sizes[ServiceWorkerManager.CACHE_NAMES.BUILTINS] || 0,
+            installedSize: sizes[ServiceWorkerManager.CACHE_NAMES.INSTALLED] || 0,
+            gamePacksSize: sizes[ServiceWorkerManager.CACHE_NAMES.GAME_PACKS] || 0,
+            totalSize,
+            cacheNames
+        };
+    }
+
+    public async clearExpiredCache(): Promise<boolean> {
+        if (!this.registration) return false;
+
+        try {
+            const cacheNames = Object.values(ServiceWorkerManager.CACHE_NAMES);
+            const expirationTime = Date.now() - (this.config.cacheExpiration * 24 * 60 * 60 * 1000);
+
+            for (const cacheName of cacheNames) {
+                const cache = await caches.open(cacheName);
+                const keys = await cache.keys();
+
+                for (const request of keys) {
+                    const response = await cache.match(request);
+                    if (response) {
+                        const dateHeader = response.headers.get('date');
+                        if (dateHeader) {
+                            const responseTime = new Date(dateHeader).getTime();
+                            if (responseTime < expirationTime) {
+                                await cache.delete(request);
+                                console.log(`ServiceWorker: Removed expired cache entry: ${request.url}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            console.log('ServiceWorker: Cleared expired cache entries');
+            return true;
+        } catch (error) {
+            console.error('ServiceWorker: Failed to clear expired cache:', error);
+            return false;
+        }
+    }
+
+    public async enforceCacheSizeLimit(): Promise<boolean> {
+        if (!this.registration) return false;
+
+        try {
+            const cacheInfo = await this.getCacheInfo();
+            const maxSizeBytes = this.config.maxCacheSize * 1024 * 1024; // Convert MB to bytes
+
+            if (cacheInfo.totalSize > maxSizeBytes) {
+                console.log(`ServiceWorker: Cache size (${cacheInfo.totalSize} bytes) exceeds limit (${maxSizeBytes} bytes), cleaning up...`);
+                
+                // Clear oldest caches first (dynamic, then installed, then game packs)
+                const cachePriority = [
+                    ServiceWorkerManager.CACHE_NAMES.DYNAMIC,
+                    ServiceWorkerManager.CACHE_NAMES.INSTALLED,
+                    ServiceWorkerManager.CACHE_NAMES.GAME_PACKS,
+                    ServiceWorkerManager.CACHE_NAMES.BUILTINS,
+                    ServiceWorkerManager.CACHE_NAMES.STATIC
+                ];
+
+                for (const cacheName of cachePriority) {
+                    await caches.delete(cacheName);
+                    console.log(`ServiceWorker: Cleared cache: ${cacheName}`);
+                    
+                    // Check if we're under the limit now
+                    const newCacheInfo = await this.getCacheInfo();
+                    if (newCacheInfo.totalSize <= maxSizeBytes) {
+                        break;
+                    }
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('ServiceWorker: Failed to enforce cache size limit:', error);
+            return false;
+        }
     }
 
     public async clearCache(): Promise<void> {

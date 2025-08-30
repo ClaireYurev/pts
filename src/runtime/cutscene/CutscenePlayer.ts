@@ -1,398 +1,419 @@
-import { Cutscene, CutsceneItem } from '../../editor/CutsceneEditor.js';
+import { GameEngine } from '../../engine/GameEngine';
+import { Entity } from '../../engine/Entity';
 
-export interface CutsceneContext {
-    engine: any; // GameEngine reference
-    currentTime: number;
-    variables: Record<string, any>;
+export interface CutsceneItem {
+  id: string;
+  time: number;
+  track: string;
+  action: string;
+  args: Record<string, any>;
+  duration?: number;
 }
 
-export interface CutsceneAction {
-    name: string;
-    execute: (context: CutsceneContext, item: CutsceneItem) => Promise<void>;
+export interface CutsceneTrack {
+  id: string;
+  name: string;
+  type: 'camera' | 'text' | 'sprite' | 'music' | 'wait';
+  color: string;
+  items: CutsceneItem[];
+}
+
+export interface CutsceneData {
+  id: string;
+  name: string;
+  duration: number;
+  tracks: CutsceneTrack[];
+  metadata: {
+    created: string;
+    editor: string;
+    description?: string;
+  };
+}
+
+export interface CutsceneContext {
+  engine: GameEngine;
+  camera: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  entities: Map<string, Entity>;
+  variables: Record<string, any>;
+}
+
+export interface CutsceneActionHandler {
+  execute: (item: CutsceneItem, context: CutsceneContext) => void | Promise<void>;
+  validate?: (item: CutsceneItem) => string | null;
 }
 
 export class CutscenePlayer {
-    private cutscenes: Map<string, Cutscene> = new Map();
-    private activeCutscene: { cutscene: Cutscene; startTime: number; paused: boolean } | null = null;
-    private actionHandlers: Map<string, CutsceneAction> = new Map();
-    private engine: any;
-    private isPlaying: boolean = false;
+  private actionHandlers: Map<string, CutsceneActionHandler> = new Map();
+  private isPlaying = false;
+  private startTime = 0;
+  private currentTime = 0;
+  private executedItems = new Set<string>();
+  private context: CutsceneContext;
+  private cutscene: CutsceneData;
+  private onComplete?: () => void;
+  private onUpdate?: (time: number) => void;
 
-    constructor(engine: any) {
-        this.engine = engine;
-        this.initializeActionHandlers();
-    }
+  constructor(cutscene: CutsceneData, engine: GameEngine, onComplete?: () => void, onUpdate?: (time: number) => void) {
+    this.cutscene = cutscene;
+    this.onComplete = onComplete;
+    this.onUpdate = onUpdate;
+    
+    this.context = {
+      engine,
+      camera: { x: 0, y: 0, zoom: 1 },
+      entities: new Map(),
+      variables: {}
+    };
+    
+    this.registerDefaultHandlers();
+  }
 
-    private initializeActionHandlers(): void {
-        // Camera actions
-        this.registerAction({
-            name: 'pan',
-            execute: async (context, item) => {
-                const x = item.args.x || 0;
-                const y = item.args.y || 0;
-                const duration = item.args.duration || 1000;
-                
-                if (this.engine.panCamera) {
-                    await this.engine.panCamera(x, y, duration);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'zoom',
-            execute: async (context, item) => {
-                const scale = item.args.scale || 1;
-                const duration = item.args.duration || 1000;
-                
-                if (this.engine.zoomCamera) {
-                    await this.engine.zoomCamera(scale, duration);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'shake',
-            execute: async (context, item) => {
-                const intensity = item.args.intensity || 5;
-                const duration = item.args.duration || 500;
-                
-                if (this.engine.shakeCamera) {
-                    await this.engine.shakeCamera(intensity, duration);
-                }
-            }
-        });
-
-        // Text actions
-        this.registerAction({
-            name: 'show',
-            execute: async (context, item) => {
-                const text = item.args.text || '';
-                const speaker = item.args.speaker || '';
-                const style = item.args.style || 'normal';
-                
-                if (this.engine.showText) {
-                    await this.engine.showText(text, speaker, style);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'hide',
-            execute: async (context, item) => {
-                if (this.engine.hideText) {
-                    await this.engine.hideText();
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'typewriter',
-            execute: async (context, item) => {
-                const text = item.args.text || '';
-                const speed = item.args.speed || 50;
-                
-                if (this.engine.typewriterText) {
-                    await this.engine.typewriterText(text, speed);
-                }
-            }
-        });
-
-        // Sprite actions
-        this.registerAction({
-            name: 'show',
-            execute: async (context, item) => {
-                const spriteId = item.args.spriteId || '';
-                const x = item.args.x || 0;
-                const y = item.args.y || 0;
-                const scale = item.args.scale || 1;
-                
-                if (this.engine.showSprite) {
-                    await this.engine.showSprite(spriteId, x, y, scale);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'hide',
-            execute: async (context, item) => {
-                if (this.engine.hideSprite) {
-                    await this.engine.hideSprite();
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'move',
-            execute: async (context, item) => {
-                const x = item.args.x || 0;
-                const y = item.args.y || 0;
-                const duration = item.args.duration || 1000;
-                
-                if (this.engine.moveSprite) {
-                    await this.engine.moveSprite(x, y, duration);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'animate',
-            execute: async (context, item) => {
-                const animationId = item.args.animationId || '';
-                const loop = item.args.loop || false;
-                
-                if (this.engine.animateSprite) {
-                    await this.engine.animateSprite(animationId, loop);
-                }
-            }
-        });
-
-        // Music actions
-        this.registerAction({
-            name: 'play',
-            execute: async (context, item) => {
-                const musicId = item.args.musicId || '';
-                const volume = item.args.volume || 1;
-                const fadeIn = item.args.fadeIn || 1000;
-                
-                if (this.engine.playMusic) {
-                    await this.engine.playMusic(musicId, volume, fadeIn);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'stop',
-            execute: async (context, item) => {
-                const fadeOut = item.args.fadeOut || 1000;
-                
-                if (this.engine.stopMusic) {
-                    await this.engine.stopMusic(fadeOut);
-                }
-            }
-        });
-
-        this.registerAction({
-            name: 'crossfade',
-            execute: async (context, item) => {
-                const musicId = item.args.musicId || '';
-                const duration = item.args.duration || 2000;
-                
-                if (this.engine.crossfadeMusic) {
-                    await this.engine.crossfadeMusic(musicId, duration);
-                }
-            }
-        });
-
-        // Wait actions
-        this.registerAction({
-            name: 'wait',
-            execute: async (context, item) => {
-                const duration = item.args.duration || 1000;
-                await this.wait(duration);
-            }
-        });
-
-        this.registerAction({
-            name: 'waitForInput',
-            execute: async (context, item) => {
-                const key = item.args.key || 'any';
-                await this.waitForInput(key);
-            }
-        });
-    }
-
-    public registerAction(action: CutsceneAction): void {
-        this.actionHandlers.set(action.name, action);
-    }
-
-    public loadCutscene(cutscene: Cutscene): void {
-        this.cutscenes.set(cutscene.id, cutscene);
-    }
-
-    public loadCutscenes(cutscenes: Cutscene[]): void {
-        cutscenes.forEach(cutscene => this.loadCutscene(cutscene));
-    }
-
-    public async playCutscene(cutsceneId: string): Promise<void> {
-        const cutscene = this.cutscenes.get(cutsceneId);
-        if (!cutscene) {
-            console.warn(`Cutscene not found: ${cutsceneId}`);
-            return;
-        }
-
-        if (this.activeCutscene) {
-            await this.stopCutscene();
-        }
-
-        this.activeCutscene = {
-            cutscene: cutscene,
-            startTime: Date.now(),
-            paused: false
-        };
-
-        this.isPlaying = true;
-        console.log(`Playing cutscene: ${cutscene.name}`);
-
-        // Pause gameplay
-        if (this.engine.pauseGameplay) {
-            this.engine.pauseGameplay();
-        }
-
-        // Execute cutscene
-        await this.executeCutscene();
-    }
-
-    public async stopCutscene(): Promise<void> {
-        if (!this.activeCutscene) return;
-
-        this.isPlaying = false;
-        this.activeCutscene = null;
-
-        // Resume gameplay
-        if (this.engine.resumeGameplay) {
-            this.engine.resumeGameplay();
-        }
-
-        console.log('Cutscene stopped');
-    }
-
-    public pauseCutscene(): void {
-        if (this.activeCutscene) {
-            this.activeCutscene.paused = true;
-            console.log('Cutscene paused');
-        }
-    }
-
-    public resumeCutscene(): void {
-        if (this.activeCutscene) {
-            this.activeCutscene.paused = false;
-            console.log('Cutscene resumed');
-        }
-    }
-
-    public skipCutscene(): void {
-        if (this.activeCutscene) {
-            this.stopCutscene();
-        }
-    }
-
-    private async executeCutscene(): Promise<void> {
-        if (!this.activeCutscene) return;
-
-        const { cutscene, startTime } = this.activeCutscene;
-        const context: CutsceneContext = {
-            engine: this.engine,
-            currentTime: 0,
-            variables: {}
-        };
-
-        // Sort all items by time
-        const allItems: Array<{ item: CutsceneItem; track: string }> = [];
-        for (const track of cutscene.tracks) {
-            for (const item of track.items) {
-                allItems.push({ item, track: track.type });
-            }
-        }
-        allItems.sort((a, b) => a.item.time - b.item.time);
-
-        // Execute items in order
-        for (const { item, track } of allItems) {
-            if (!this.isPlaying || this.activeCutscene?.paused) {
-                break;
-            }
-
-            // Wait until item's time
-            const waitTime = item.time - context.currentTime;
-            if (waitTime > 0) {
-                await this.wait(waitTime);
-                context.currentTime = item.time;
-            }
-
-            if (!this.isPlaying || this.activeCutscene?.paused) {
-                break;
-            }
-
-            // Execute item
-            await this.executeItem(context, item, track);
-        }
-
-        // Cutscene completed
-        await this.stopCutscene();
-    }
-
-    private async executeItem(context: CutsceneContext, item: CutsceneItem, track: string): Promise<void> {
-        try {
-            const handler = this.actionHandlers.get(item.action);
-            if (handler) {
-                await handler.execute(context, item);
-            } else {
-                console.warn(`No action handler found for: ${item.action} in track: ${track}`);
-            }
-        } catch (error) {
-            console.error(`Error executing cutscene item ${item.id}:`, error);
-        }
-    }
-
-    private async wait(duration: number): Promise<void> {
-        return new Promise(resolve => {
-            setTimeout(resolve, duration);
-        });
-    }
-
-    private async waitForInput(key: string): Promise<void> {
-        return new Promise(resolve => {
-            const handleKeyDown = (event: KeyboardEvent) => {
-                if (key === 'any' || event.code === key) {
-                    document.removeEventListener('keydown', handleKeyDown);
-                    resolve();
-                }
-            };
-            document.addEventListener('keydown', handleKeyDown);
-        });
-    }
-
-    public isPlayingCutscene(): boolean {
-        return this.isPlaying && this.activeCutscene !== null;
-    }
-
-    public getCurrentCutscene(): Cutscene | null {
-        return this.activeCutscene?.cutscene || null;
-    }
-
-    public getCutsceneProgress(): number {
-        if (!this.activeCutscene) return 0;
+  private registerDefaultHandlers() {
+    // Camera actions
+    this.registerHandler('camera', 'move', {
+      execute: (item, context) => {
+        const { x, y, duration = 1000 } = item.args;
+        const startX = context.camera.x;
+        const startY = context.camera.y;
+        const startTime = this.currentTime;
         
-        const elapsed = Date.now() - this.activeCutscene.startTime;
-        return Math.min(elapsed / this.activeCutscene.cutscene.duration, 1);
-    }
+        const animate = () => {
+          const elapsed = this.currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeProgress = this.easeInOutQuad(progress);
+          
+          context.camera.x = startX + (x - startX) * easeProgress;
+          context.camera.y = startY + (y - startY) * easeProgress;
+          
+          if (progress < 1 && this.isPlaying) {
+            requestAnimationFrame(animate);
+          }
+        };
+        
+        animate();
+      }
+    });
 
-    public getCutscene(cutsceneId: string): Cutscene | undefined {
-        return this.cutscenes.get(cutsceneId);
-    }
+    this.registerHandler('camera', 'zoom', {
+      execute: (item, context) => {
+        const { zoom, duration = 1000 } = item.args;
+        const startZoom = context.camera.zoom;
+        const startTime = this.currentTime;
+        
+        const animate = () => {
+          const elapsed = this.currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeProgress = this.easeInOutQuad(progress);
+          
+          context.camera.zoom = startZoom + (zoom - startZoom) * easeProgress;
+          
+          if (progress < 1 && this.isPlaying) {
+            requestAnimationFrame(animate);
+          }
+        };
+        
+        animate();
+      }
+    });
 
-    public getAllCutscenes(): Cutscene[] {
-        return Array.from(this.cutscenes.values());
-    }
+    this.registerHandler('camera', 'shake', {
+      execute: (item, context) => {
+        const { intensity = 10, duration = 500 } = item.args;
+        const startTime = this.currentTime;
+        const originalX = context.camera.x;
+        const originalY = context.camera.y;
+        
+        const shake = () => {
+          const elapsed = this.currentTime - startTime;
+          if (elapsed < duration && this.isPlaying) {
+            const progress = elapsed / duration;
+            const currentIntensity = intensity * (1 - progress);
+            
+            context.camera.x = originalX + (Math.random() - 0.5) * currentIntensity;
+            context.camera.y = originalY + (Math.random() - 0.5) * currentIntensity;
+            
+            requestAnimationFrame(shake);
+          } else {
+            context.camera.x = originalX;
+            context.camera.y = originalY;
+          }
+        };
+        
+        shake();
+      }
+    });
 
-    public removeCutscene(cutsceneId: string): boolean {
-        return this.cutscenes.delete(cutsceneId);
-    }
+    // Text actions
+    this.registerHandler('text', 'show', {
+      execute: (item, context) => {
+        const { text, x = 400, y = 300, fontSize = 24, color = '#ffffff', duration = 3000 } = item.args;
+        
+        // Create text overlay
+        const textElement = document.createElement('div');
+        textElement.style.position = 'absolute';
+        textElement.style.left = x + 'px';
+        textElement.style.top = y + 'px';
+        textElement.style.fontSize = fontSize + 'px';
+        textElement.style.color = color;
+        textElement.style.fontFamily = 'Arial, sans-serif';
+        textElement.style.textAlign = 'center';
+        textElement.style.pointerEvents = 'none';
+        textElement.style.zIndex = '1000';
+        textElement.textContent = text;
+        
+        document.body.appendChild(textElement);
+        
+        // Fade in
+        textElement.style.opacity = '0';
+        textElement.style.transition = 'opacity 0.5s ease-in';
+        setTimeout(() => {
+          textElement.style.opacity = '1';
+        }, 50);
+        
+        // Remove after duration
+        setTimeout(() => {
+          textElement.style.transition = 'opacity 0.5s ease-out';
+          textElement.style.opacity = '0';
+          setTimeout(() => {
+            if (textElement.parentNode) {
+              textElement.parentNode.removeChild(textElement);
+            }
+          }, 500);
+        }, duration);
+      }
+    });
 
-    public clearCutscenes(): void {
-        this.cutscenes.clear();
-    }
+    this.registerHandler('text', 'hide', {
+      execute: (item, context) => {
+        // Hide all text elements
+        const textElements = document.querySelectorAll('[data-cutscene-text]');
+        textElements.forEach(element => {
+          (element as HTMLElement).style.transition = 'opacity 0.5s ease-out';
+          (element as HTMLElement).style.opacity = '0';
+          setTimeout(() => {
+            if (element.parentNode) {
+              element.parentNode.removeChild(element);
+            }
+          }, 500);
+        });
+      }
+    });
 
-    public exportCutscene(cutsceneId: string): string {
-        const cutscene = this.cutscenes.get(cutsceneId);
-        return cutscene ? JSON.stringify(cutscene, null, 2) : '';
-    }
+    // Sprite actions
+    this.registerHandler('sprite', 'show', {
+      execute: (item, context) => {
+        const { spriteId, x, y, scale = 1, rotation = 0 } = item.args;
+        
+        // Create sprite element
+        const spriteElement = document.createElement('img');
+        spriteElement.style.position = 'absolute';
+        spriteElement.style.left = x + 'px';
+        spriteElement.style.top = y + 'px';
+        spriteElement.style.transform = `scale(${scale}) rotate(${rotation}deg)`;
+        spriteElement.style.pointerEvents = 'none';
+        spriteElement.style.zIndex = '999';
+        spriteElement.src = spriteId; // Assuming spriteId is a URL
+        
+        document.body.appendChild(spriteElement);
+        
+        // Store reference for later manipulation
+        context.variables[`sprite_${item.id}`] = spriteElement;
+      }
+    });
 
-    public importCutscene(json: string): void {
-        try {
-            const cutscene = JSON.parse(json) as Cutscene;
-            this.loadCutscene(cutscene);
-        } catch (error) {
-            console.error('Failed to import cutscene:', error);
+    this.registerHandler('sprite', 'move', {
+      execute: (item, context) => {
+        const { spriteId, x, y, duration = 1000 } = item.args;
+        const spriteElement = context.variables[`sprite_${spriteId}`] as HTMLElement;
+        
+        if (spriteElement) {
+          const startX = parseInt(spriteElement.style.left) || 0;
+          const startY = parseInt(spriteElement.style.top) || 0;
+          const startTime = this.currentTime;
+          
+          const animate = () => {
+            const elapsed = this.currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeProgress = this.easeInOutQuad(progress);
+            
+            spriteElement.style.left = (startX + (x - startX) * easeProgress) + 'px';
+            spriteElement.style.top = (startY + (y - startY) * easeProgress) + 'px';
+            
+            if (progress < 1 && this.isPlaying) {
+              requestAnimationFrame(animate);
+            }
+          };
+          
+          animate();
         }
+      }
+    });
+
+    this.registerHandler('sprite', 'hide', {
+      execute: (item, context) => {
+        const { spriteId } = item.args;
+        const spriteElement = context.variables[`sprite_${spriteId}`] as HTMLElement;
+        
+        if (spriteElement) {
+          spriteElement.style.transition = 'opacity 0.5s ease-out';
+          spriteElement.style.opacity = '0';
+          setTimeout(() => {
+            if (spriteElement.parentNode) {
+              spriteElement.parentNode.removeChild(spriteElement);
+            }
+            delete context.variables[`sprite_${spriteId}`];
+          }, 500);
+        }
+      }
+    });
+
+    // Music actions
+    this.registerHandler('music', 'play', {
+      execute: (item, context) => {
+        const { musicId, volume = 1, loop = false } = item.args;
+        context.engine.audioManager?.playMusic(musicId, { volume, loop });
+      }
+    });
+
+    this.registerHandler('music', 'stop', {
+      execute: (item, context) => {
+        context.engine.audioManager?.stopMusic();
+      }
+    });
+
+    this.registerHandler('music', 'fadeIn', {
+      execute: (item, context) => {
+        const { musicId, duration = 2000, volume = 1 } = item.args;
+        context.engine.audioManager?.fadeInMusic(musicId, duration, volume);
+      }
+    });
+
+    this.registerHandler('music', 'fadeOut', {
+      execute: (item, context) => {
+        const { duration = 2000 } = item.args;
+        context.engine.audioManager?.fadeOutMusic(duration);
+      }
+    });
+
+    // Wait action
+    this.registerHandler('wait', 'wait', {
+      execute: (item, context) => {
+        // Wait actions are handled by the timeline system
+        // This handler is just a placeholder
+      }
+    });
+  }
+
+  private easeInOutQuad(t: number): number {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
+  registerHandler(trackType: string, action: string, handler: CutsceneActionHandler) {
+    const key = `${trackType}:${action}`;
+    this.actionHandlers.set(key, handler);
+  }
+
+  play() {
+    this.isPlaying = true;
+    this.startTime = Date.now() - this.currentTime;
+    this.executedItems.clear();
+    this.update();
+  }
+
+  pause() {
+    this.isPlaying = false;
+  }
+
+  stop() {
+    this.isPlaying = false;
+    this.currentTime = 0;
+    this.executedItems.clear();
+    this.cleanup();
+  }
+
+  seek(time: number) {
+    this.currentTime = Math.max(0, Math.min(time, this.cutscene.duration));
+    this.executedItems.clear();
+    this.update();
+  }
+
+  private update() {
+    if (!this.isPlaying) return;
+
+    this.currentTime = Date.now() - this.startTime;
+    
+    if (this.onUpdate) {
+      this.onUpdate(this.currentTime);
     }
+
+    // Execute items that should trigger at this time
+    for (const track of this.cutscene.tracks) {
+      for (const item of track.items) {
+        if (item.time <= this.currentTime && !this.executedItems.has(item.id)) {
+          this.executeItem(item);
+          this.executedItems.add(item.id);
+        }
+      }
+    }
+
+    if (this.currentTime >= this.cutscene.duration) {
+      this.complete();
+    } else {
+      requestAnimationFrame(() => this.update());
+    }
+  }
+
+  private executeItem(item: CutsceneItem) {
+    const handler = this.actionHandlers.get(`${item.track}:${item.action}`);
+    if (handler) {
+      try {
+        handler.execute(item, this.context);
+      } catch (error) {
+        console.error(`Error executing cutscene item ${item.id}:`, error);
+      }
+    } else {
+      console.warn(`No handler found for action: ${item.track}:${item.action}`);
+    }
+  }
+
+  private complete() {
+    this.isPlaying = false;
+    this.cleanup();
+    if (this.onComplete) {
+      this.onComplete();
+    }
+  }
+
+  private cleanup() {
+    // Remove all cutscene elements
+    const cutsceneElements = document.querySelectorAll('[data-cutscene-text], [data-cutscene-sprite]');
+    cutsceneElements.forEach(element => {
+      if (element.parentNode) {
+        element.parentNode.removeChild(element);
+      }
+    });
+    
+    // Clear variables
+    this.context.variables = {};
+  }
+
+  getCurrentTime(): number {
+    return this.currentTime;
+  }
+
+  getDuration(): number {
+    return this.cutscene.duration;
+  }
+
+  isPlayingState(): boolean {
+    return this.isPlaying;
+  }
+
+  getContext(): CutsceneContext {
+    return this.context;
+  }
 } 

@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioManager & SettingsStore Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 200px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .settings-display {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>AudioManager & SettingsStore Test</h1>
+    
+    <div class="test-section">
+        <h2>Audio Controls</h2>
+        <div class="control-group">
+            <label>Master Volume:</label>
+            <input type="range" id="masterVolume" min="0" max="100" value="100">
+            <span id="masterVolumeValue">100%</span>
+        </div>
+        <div class="control-group">
+            <label>Music Volume:</label>
+            <input type="range" id="musicVolume" min="0" max="100" value="80">
+            <span id="musicVolumeValue">80%</span>
+        </div>
+        <div class="control-group">
+            <label>SFX Volume:</label>
+            <input type="range" id="sfxVolume" min="0" max="100" value="90">
+            <span id="sfxVolumeValue">90%</span>
+        </div>
+        <div class="control-group">
+            <button id="toggleMute">Unmute</button>
+            <button id="playTestSfx">Play Test SFX</button>
+            <button id="playTestMusic">Play Test Music</button>
+            <button id="stopMusic">Stop Music</button>
+        </div>
+        <div class="status" id="audioStatus">
+            Audio Status: Initializing...
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Video Settings</h2>
+        <div class="control-group">
+            <label>Scale Mode:</label>
+            <select id="scaleMode">
+                <option value="integer">Integer</option>
+                <option value="fit">Fit</option>
+                <option value="stretch">Stretch</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Safe Area:</label>
+            <input type="range" id="safeArea" min="10" max="100" value="90">
+            <span id="safeAreaValue">90%</span>
+        </div>
+        <div class="control-group">
+            <label>FPS Cap:</label>
+            <select id="fpsCap">
+                <option value="">No Limit</option>
+                <option value="30">30 FPS</option>
+                <option value="60" selected>60 FPS</option>
+                <option value="120">120 FPS</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <button id="toggleFullscreen">Toggle Fullscreen</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Input Settings</h2>
+        <div class="control-group">
+            <label>Input Profile:</label>
+            <select id="inputProfile">
+                <option value="classic" selected>Classic</option>
+                <option value="wasd">WASD</option>
+                <option value="custom">Custom</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Deadzone:</label>
+            <input type="range" id="deadzone" min="0" max="50" value="10">
+            <span id="deadzoneValue">10%</span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Accessibility Settings</h2>
+        <div class="control-group">
+            <label>High Contrast:</label>
+            <input type="checkbox" id="highContrast">
+        </div>
+        <div class="control-group">
+            <label>Reduce Flashes:</label>
+            <input type="checkbox" id="reduceFlashes">
+        </div>
+        <div class="control-group">
+            <label>Late Jump (ms):</label>
+            <input type="range" id="lateJump" min="0" max="500" value="100">
+            <span id="lateJumpValue">100ms</span>
+        </div>
+        <div class="control-group">
+            <label>Sticky Grab:</label>
+            <input type="checkbox" id="stickyGrab">
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Settings Management</h2>
+        <button id="resetSettings">Reset to Defaults</button>
+        <button id="exportSettings">Export Settings</button>
+        <button id="importSettings">Import Settings</button>
+        <div class="settings-display" id="settingsDisplay">
+            Loading settings...
+        </div>
+    </div>
+
+    <script type="module">
+        import { AudioManager } from './src/engine/AudioManager.js';
+        import { SettingsStore } from './src/engine/SettingsStore.js';
+
+        // Initialize managers
+        const audioManager = new AudioManager();
+        const settingsStore = SettingsStore.getInstance();
+
+        // DOM elements
+        const elements = {
+            masterVolume: document.getElementById('masterVolume'),
+            musicVolume: document.getElementById('musicVolume'),
+            sfxVolume: document.getElementById('sfxVolume'),
+            toggleMute: document.getElementById('toggleMute'),
+            playTestSfx: document.getElementById('playTestSfx'),
+            playTestMusic: document.getElementById('playTestMusic'),
+            stopMusic: document.getElementById('stopMusic'),
+            audioStatus: document.getElementById('audioStatus'),
+            scaleMode: document.getElementById('scaleMode'),
+            safeArea: document.getElementById('safeArea'),
+            fpsCap: document.getElementById('fpsCap'),
+            toggleFullscreen: document.getElementById('toggleFullscreen'),
+            inputProfile: document.getElementById('inputProfile'),
+            deadzone: document.getElementById('deadzone'),
+            highContrast: document.getElementById('highContrast'),
+            reduceFlashes: document.getElementById('reduceFlashes'),
+            lateJump: document.getElementById('lateJump'),
+            stickyGrab: document.getElementById('stickyGrab'),
+            resetSettings: document.getElementById('resetSettings'),
+            exportSettings: document.getElementById('exportSettings'),
+            importSettings: document.getElementById('importSettings'),
+            settingsDisplay: document.getElementById('settingsDisplay')
+        };
+
+        // Update display values
+        function updateDisplayValues() {
+            document.getElementById('masterVolumeValue').textContent = Math.round(audioManager.getMasterVolume() * 100) + '%';
+            document.getElementById('musicVolumeValue').textContent = Math.round(audioManager.getMusicVolume() * 100) + '%';
+            document.getElementById('sfxVolumeValue').textContent = Math.round(audioManager.getSfxVolume() * 100) + '%';
+            document.getElementById('safeAreaValue').textContent = Math.round(settingsStore.getVideoSettings().safeAreaPct * 100) + '%';
+            document.getElementById('deadzoneValue').textContent = Math.round(settingsStore.getInputSettings().deadzonePct * 100) + '%';
+            document.getElementById('lateJumpValue').textContent = settingsStore.getAccessibilitySettings().lateJumpMs + 'ms';
+        }
+
+        // Update settings display
+        function updateSettingsDisplay() {
+            elements.settingsDisplay.textContent = JSON.stringify(settingsStore.getAllSettings(), null, 2);
+        }
+
+        // Initialize UI with current settings
+        function initializeUI() {
+            const audioSettings = settingsStore.getAudioSettings();
+            const videoSettings = settingsStore.getVideoSettings();
+            const inputSettings = settingsStore.getInputSettings();
+            const accessibilitySettings = settingsStore.getAccessibilitySettings();
+
+            // Audio controls
+            elements.masterVolume.value = audioSettings.master * 100;
+            elements.musicVolume.value = audioSettings.music * 100;
+            elements.sfxVolume.value = audioSettings.sfx * 100;
+            elements.toggleMute.textContent = audioSettings.muted ? 'Unmute' : 'Mute';
+
+            // Video controls
+            elements.scaleMode.value = videoSettings.scaleMode;
+            elements.safeArea.value = videoSettings.safeAreaPct * 100;
+            elements.fpsCap.value = videoSettings.fpsCap || '';
+
+            // Input controls
+            elements.inputProfile.value = inputSettings.profile;
+            elements.deadzone.value = inputSettings.deadzonePct * 100;
+
+            // Accessibility controls
+            elements.highContrast.checked = accessibilitySettings.highContrast;
+            elements.reduceFlashes.checked = accessibilitySettings.reduceFlashes;
+            elements.lateJump.value = accessibilitySettings.lateJumpMs;
+            elements.stickyGrab.checked = accessibilitySettings.stickyGrab;
+
+            updateDisplayValues();
+            updateSettingsDisplay();
+        }
+
+        // Event listeners
+        elements.masterVolume.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            audioManager.setMasterVolume(value);
+            settingsStore.setMasterVolume(value);
+            updateDisplayValues();
+        });
+
+        elements.musicVolume.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            audioManager.setMusicVolume(value);
+            settingsStore.setMusicVolume(value);
+            updateDisplayValues();
+        });
+
+        elements.sfxVolume.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            audioManager.setSfxVolume(value);
+            settingsStore.setSfxVolume(value);
+            updateDisplayValues();
+        });
+
+        elements.toggleMute.addEventListener('click', () => {
+            const newMuted = !audioManager.isAudioMuted();
+            audioManager.setMuted(newMuted);
+            settingsStore.setAudioMuted(newMuted);
+            elements.toggleMute.textContent = newMuted ? 'Unmute' : 'Mute';
+        });
+
+        elements.playTestSfx.addEventListener('click', () => {
+            // Create a simple test tone
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.2);
+            
+            elements.audioStatus.textContent = 'Audio Status: Test SFX played';
+        });
+
+        elements.playTestMusic.addEventListener('click', () => {
+            elements.audioStatus.textContent = 'Audio Status: Test music would play (no audio file loaded)';
+        });
+
+        elements.stopMusic.addEventListener('click', () => {
+            audioManager.stopMusic();
+            elements.audioStatus.textContent = 'Audio Status: Music stopped';
+        });
+
+        // Video settings
+        elements.scaleMode.addEventListener('change', (e) => {
+            settingsStore.setScaleMode(e.target.value);
+        });
+
+        elements.safeArea.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            settingsStore.setSafeAreaPct(value);
+            updateDisplayValues();
+        });
+
+        elements.fpsCap.addEventListener('change', (e) => {
+            const value = e.target.value ? parseInt(e.target.value) : undefined;
+            settingsStore.setFpsCap(value);
+        });
+
+        // Input settings
+        elements.inputProfile.addEventListener('change', (e) => {
+            settingsStore.setInputProfile(e.target.value);
+        });
+
+        elements.deadzone.addEventListener('input', (e) => {
+            const value = e.target.value / 100;
+            settingsStore.setDeadzonePct(value);
+            updateDisplayValues();
+        });
+
+        // Accessibility settings
+        elements.highContrast.addEventListener('change', (e) => {
+            settingsStore.setHighContrast(e.target.checked);
+        });
+
+        elements.reduceFlashes.addEventListener('change', (e) => {
+            settingsStore.setReduceFlashes(e.target.checked);
+        });
+
+        elements.lateJump.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            settingsStore.setLateJumpMs(value);
+            updateDisplayValues();
+        });
+
+        elements.stickyGrab.addEventListener('change', (e) => {
+            settingsStore.setStickyGrab(e.target.checked);
+        });
+
+        // Settings management
+        elements.resetSettings.addEventListener('click', () => {
+            if (confirm('Reset all settings to defaults?')) {
+                settingsStore.resetToDefaults();
+                initializeUI();
+            }
+        });
+
+        elements.exportSettings.addEventListener('click', () => {
+            const settings = settingsStore.exportSettings();
+            const blob = new Blob([settings], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pts-settings.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        elements.importSettings.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const success = settingsStore.importSettings(e.target.result);
+                        if (success) {
+                            initializeUI();
+                            alert('Settings imported successfully!');
+                        } else {
+                            alert('Failed to import settings. Invalid format.');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeUI();
+            elements.audioStatus.textContent = 'Audio Status: Ready (click anywhere to enable audio)';
+            
+            // Enable audio on first user interaction
+            document.addEventListener('click', () => {
+                audioManager.onUserInteraction();
+                elements.audioStatus.textContent = 'Audio Status: Enabled';
+            }, { once: true });
+        });
+
+        // Update settings display when settings change
+        settingsStore.addListener('video.scaleMode', updateSettingsDisplay);
+        settingsStore.addListener('video.safeAreaPct', updateSettingsDisplay);
+        settingsStore.addListener('audio.master', updateSettingsDisplay);
+        settingsStore.addListener('audio.music', updateSettingsDisplay);
+        settingsStore.addListener('audio.sfx', updateSettingsDisplay);
+        settingsStore.addListener('audio.muted', updateSettingsDisplay);
+    </script>
+</body>
+</html> 

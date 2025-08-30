@@ -1,177 +1,471 @@
-import { GamePack, LevelData } from './EditorApp.js';
+import JSZip from 'jszip';
+import { ExportManager } from './ExportManager';
+import { GamePack } from '../engine/GamePack';
+import { ECAScript } from '../runtime/scripting/ECA';
+import { CutsceneData } from '../runtime/cutscene/CutscenePlayer';
+
+export interface ImportOptions {
+  validateSchema: boolean;
+  mergeWithExisting: boolean;
+  overwriteConflicts: boolean;
+  importAssets: boolean;
+  importScripts: boolean;
+  importCutscenes: boolean;
+  importLevels: boolean;
+}
+
+export interface ImportResult {
+  success: boolean;
+  gamePack?: GamePack;
+  errors?: string[];
+  warnings?: string[];
+  importedCount: {
+    levels: number;
+    scripts: number;
+    cutscenes: number;
+    assets: number;
+  };
+}
+
+export interface ImportProgress {
+  stage: 'validating' | 'importing' | 'processing' | 'complete';
+  progress: number;
+  message: string;
+}
 
 export class ImportManager {
-    constructor() {}
+  private exportManager: ExportManager;
 
-    public async importFile(file: File): Promise<LevelData> {
-        try {
-            const content = await this.readFileAsText(file);
-            const data = JSON.parse(content);
-            
-            // Determine if it's a level or game pack
-            if (this.isGamePack(data)) {
-                return this.importGamePack(data);
-            } else if (this.isLevel(data)) {
-                return this.importLevel(data);
-            } else {
-                throw new Error('Invalid file format: neither level nor game pack');
-            }
-        } catch (error) {
-            console.error('Failed to import file:', error);
-            throw new Error('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-        }
-    }
+  constructor() {
+    this.exportManager = new ExportManager();
+  }
 
-    private async readFileAsText(file: File): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result;
-                if (typeof result === 'string') {
-                    resolve(result);
-                } else {
-                    reject(new Error('Failed to read file as text'));
-                }
-            };
-            reader.onerror = () => reject(new Error('File read error'));
-            reader.readAsText(file);
+  async importFromFile(
+    file: File,
+    options: ImportOptions = {
+      validateSchema: true,
+      mergeWithExisting: false,
+      overwriteConflicts: true,
+      importAssets: true,
+      importScripts: true,
+      importCutscenes: true,
+      importLevels: true
+    },
+    onProgress?: (progress: ImportProgress) => void
+  ): Promise<ImportResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const importedCount = { levels: 0, scripts: 0, cutscenes: 0, assets: 0 };
+
+    try {
+      // Validate file type
+      if (!file.name.endsWith('.ptspack')) {
+        return {
+          success: false,
+          errors: ['File must be a .ptspack file'],
+          importedCount
+        };
+      }
+
+      onProgress?.({
+        stage: 'validating',
+        progress: 0,
+        message: 'Validating file format...'
+      });
+
+      // Import using ExportManager
+      const result = await this.exportManager.importGamePack(file);
+      
+      if (!result.success || !result.gamePack) {
+        return {
+          success: false,
+          errors: result.errors || ['Failed to import game pack'],
+          importedCount
+        };
+      }
+
+      onProgress?.({
+        stage: 'importing',
+        progress: 50,
+        message: 'Processing imported data...'
+      });
+
+      const gamePack = result.gamePack;
+
+      // Count imported items
+      if (gamePack.levels) {
+        importedCount.levels = Object.keys(gamePack.levels).length;
+      }
+      if (gamePack.scripts) {
+        importedCount.scripts = Object.keys(gamePack.scripts).length;
+      }
+      if (gamePack.cutscenes) {
+        importedCount.cutscenes = Object.keys(gamePack.cutscenes).length;
+      }
+      if (gamePack.assets) {
+        importedCount.assets = Object.keys(gamePack.assets).length;
+      }
+
+      // Validate individual components if requested
+      if (options.validateSchema) {
+        onProgress?.({
+          stage: 'processing',
+          progress: 75,
+          message: 'Validating imported content...'
         });
-    }
 
-    private isGamePack(data: any): data is GamePack {
-        return (
-            typeof data === 'object' &&
-            data !== null &&
-            typeof data.id === 'string' &&
-            typeof data.name === 'string' &&
-            typeof data.version === 'string' &&
-            Array.isArray(data.levels) &&
-            typeof data.metadata === 'object'
-        );
-    }
-
-    private isLevel(data: any): data is LevelData {
-        return (
-            typeof data === 'object' &&
-            data !== null &&
-            typeof data.id === 'string' &&
-            typeof data.name === 'string' &&
-            typeof data.width === 'number' &&
-            typeof data.height === 'number' &&
-            Array.isArray(data.tiles) &&
-            Array.isArray(data.entities) &&
-            Array.isArray(data.links)
-        );
-    }
-
-    private importGamePack(gamePack: GamePack): LevelData {
-        // Validate game pack
-        const errors = this.validateGamePack(gamePack);
-        if (errors.length > 0) {
-            throw new Error('Invalid game pack: ' + errors.join(', '));
-        }
-
-        // Return the first level (or prompt user to select one)
-        if (gamePack.levels.length === 0) {
-            throw new Error('Game pack contains no levels');
-        }
-
-        // For now, return the first level
-        return gamePack.levels[0];
-    }
-
-    private importLevel(level: LevelData): LevelData {
-        // Validate level
-        const errors = this.validateLevel(level);
-        if (errors.length > 0) {
-            throw new Error('Invalid level: ' + errors.join(', '));
-        }
-
-        return level;
-    }
-
-    private validateLevel(level: LevelData): string[] {
-        const errors: string[] = [];
-
-        // Validate required fields
-        if (!level.id) errors.push('Level ID is required');
-        if (!level.name) errors.push('Level name is required');
-        if (level.width <= 0) errors.push('Level width must be positive');
-        if (level.height <= 0) errors.push('Level height must be positive');
-
-        // Validate tiles array
-        if (!Array.isArray(level.tiles)) {
-            errors.push('Tiles must be an array');
-        } else {
-            if (level.tiles.length !== level.height) {
-                errors.push(`Tiles array height (${level.tiles.length}) doesn't match level height (${level.height})`);
+        // Validate scripts
+        if (gamePack.scripts) {
+          for (const [scriptId, script] of Object.entries(gamePack.scripts)) {
+            try {
+              const scriptErrors = this.exportManager.validateScript(script as ECAScript);
+              if (scriptErrors.length > 0) {
+                errors.push(`Script ${scriptId}: ${scriptErrors.join(', ')}`);
+              }
+            } catch (error) {
+              errors.push(`Script ${scriptId} validation error: ${error}`);
             }
-            
-            level.tiles.forEach((row, y) => {
-                if (!Array.isArray(row)) {
-                    errors.push(`Tiles row ${y} must be an array`);
-                } else if (row.length !== level.width) {
-                    errors.push(`Tiles row ${y} width (${row.length}) doesn't match level width (${level.width})`);
-                }
-            });
+          }
         }
 
-        // Validate entities array
-        if (!Array.isArray(level.entities)) {
-            errors.push('Entities must be an array');
+        // Validate cutscenes
+        if (gamePack.cutscenes) {
+          for (const [cutsceneId, cutscene] of Object.entries(gamePack.cutscenes)) {
+            try {
+              const cutsceneErrors = this.exportManager.validateCutscene(cutscene as CutsceneData);
+              if (cutsceneErrors.length > 0) {
+                errors.push(`Cutscene ${cutsceneId}: ${cutsceneErrors.join(', ')}`);
+              }
+            } catch (error) {
+              errors.push(`Cutscene ${cutsceneId} validation error: ${error}`);
+            }
+          }
+        }
+      }
+
+      onProgress?.({
+        stage: 'complete',
+        progress: 100,
+        message: 'Import completed successfully'
+      });
+
+      return {
+        success: errors.length === 0,
+        gamePack,
+        errors: errors.length > 0 ? errors : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        importedCount
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        errors: [`Import failed: ${error}`],
+        importedCount
+      };
+    }
+  }
+
+  async importFromURL(
+    url: string,
+    options: ImportOptions = {
+      validateSchema: true,
+      mergeWithExisting: false,
+      overwriteConflicts: true,
+      importAssets: true,
+      importScripts: true,
+      importCutscenes: true,
+      importLevels: true
+    },
+    onProgress?: (progress: ImportProgress) => void
+  ): Promise<ImportResult> {
+    try {
+      onProgress?.({
+        stage: 'validating',
+        progress: 0,
+        message: 'Downloading file...'
+      });
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], 'imported.ptspack', { type: 'application/zip' });
+
+      return await this.importFromFile(file, options, onProgress);
+
+    } catch (error) {
+      return {
+        success: false,
+        errors: [`Failed to download from URL: ${error}`],
+        importedCount: { levels: 0, scripts: 0, cutscenes: 0, assets: 0 }
+      };
+    }
+  }
+
+  async importFromData(
+    data: {
+      levels?: Record<string, any>;
+      scripts?: Record<string, ECAScript>;
+      cutscenes?: Record<string, CutsceneData>;
+      assets?: Record<string, any>;
+    },
+    options: ImportOptions = {
+      validateSchema: true,
+      mergeWithExisting: false,
+      overwriteConflicts: true,
+      importAssets: true,
+      importScripts: true,
+      importCutscenes: true,
+      importLevels: true
+    }
+  ): Promise<ImportResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const importedCount = { levels: 0, scripts: 0, cutscenes: 0, assets: 0 };
+
+    try {
+      const gamePack: GamePack = {
+        id: 'imported_' + Date.now(),
+        name: 'Imported Game Pack',
+        version: '1.0.0',
+        description: 'Imported from data',
+        author: 'Unknown',
+        levels: {},
+        scripts: {},
+        cutscenes: {},
+        assets: {}
+      };
+
+      // Import levels
+      if (options.importLevels && data.levels) {
+        for (const [levelId, levelData] of Object.entries(data.levels)) {
+          if (options.validateSchema) {
+            const levelErrors = this.exportManager.getSchemaErrors('level', levelData);
+            if (levelErrors.length > 0) {
+              errors.push(`Level ${levelId}: ${levelErrors.join(', ')}`);
+            }
+          }
+          gamePack.levels[levelId] = levelData;
+          importedCount.levels++;
+        }
+      }
+
+      // Import scripts
+      if (options.importScripts && data.scripts) {
+        for (const [scriptId, scriptData] of Object.entries(data.scripts)) {
+          if (options.validateSchema) {
+            const scriptErrors = this.exportManager.validateScript(scriptData);
+            if (scriptErrors.length > 0) {
+              errors.push(`Script ${scriptId}: ${scriptErrors.join(', ')}`);
+            }
+          }
+          gamePack.scripts[scriptId] = scriptData;
+          importedCount.scripts++;
+        }
+      }
+
+      // Import cutscenes
+      if (options.importCutscenes && data.cutscenes) {
+        for (const [cutsceneId, cutsceneData] of Object.entries(data.cutscenes)) {
+          if (options.validateSchema) {
+            const cutsceneErrors = this.exportManager.validateCutscene(cutsceneData);
+            if (cutsceneErrors.length > 0) {
+              errors.push(`Cutscene ${cutsceneId}: ${cutsceneErrors.join(', ')}`);
+            }
+          }
+          gamePack.cutscenes[cutsceneId] = cutsceneData;
+          importedCount.cutscenes++;
+        }
+      }
+
+      // Import assets
+      if (options.importAssets && data.assets) {
+        for (const [assetId, assetData] of Object.entries(data.assets)) {
+          gamePack.assets[assetId] = assetData;
+          importedCount.assets++;
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        gamePack,
+        errors: errors.length > 0 ? errors : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        importedCount
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        errors: [`Import from data failed: ${error}`],
+        importedCount
+      };
+    }
+  }
+
+  mergeGamePacks(
+    target: GamePack,
+    source: GamePack,
+    options: {
+      overwriteConflicts: boolean;
+      mergeLevels: boolean;
+      mergeScripts: boolean;
+      mergeCutscenes: boolean;
+      mergeAssets: boolean;
+    }
+  ): { success: boolean; conflicts: string[]; merged: GamePack } {
+    const conflicts: string[] = [];
+    const merged = { ...target };
+
+    // Merge levels
+    if (options.mergeLevels && source.levels) {
+      for (const [levelId, levelData] of Object.entries(source.levels)) {
+        if (merged.levels[levelId] && !options.overwriteConflicts) {
+          conflicts.push(`Level: ${levelId}`);
         } else {
-            level.entities.forEach((entity, index) => {
-                if (!entity.id) errors.push(`Entity ${index} missing ID`);
-                if (!entity.type) errors.push(`Entity ${index} missing type`);
-                if (typeof entity.x !== 'number') errors.push(`Entity ${index} X position must be a number`);
-                if (typeof entity.y !== 'number') errors.push(`Entity ${index} Y position must be a number`);
-                if (entity.x < 0 || entity.x >= level.width) errors.push(`Entity ${index} X position out of bounds`);
-                if (entity.y < 0 || entity.y >= level.height) errors.push(`Entity ${index} Y position out of bounds`);
-                if (!entity.props || typeof entity.props !== 'object') errors.push(`Entity ${index} props must be an object`);
-            });
+          merged.levels[levelId] = levelData;
         }
-
-        // Validate links array
-        if (!Array.isArray(level.links)) {
-            errors.push('Links must be an array');
-        } else {
-            level.links.forEach((link, index) => {
-                if (!link.from) errors.push(`Link ${index} missing from entity`);
-                if (!link.to) errors.push(`Link ${index} missing to entity`);
-                if (!link.type) errors.push(`Link ${index} missing type`);
-            });
-        }
-
-        return errors;
+      }
     }
 
-    private validateGamePack(gamePack: GamePack): string[] {
-        const errors: string[] = [];
-
-        // Validate required fields
-        if (!gamePack.id) errors.push('Game pack ID is required');
-        if (!gamePack.name) errors.push('Game pack name is required');
-        if (!gamePack.version) errors.push('Game pack version is required');
-
-        // Validate levels array
-        if (!Array.isArray(gamePack.levels)) {
-            errors.push('Levels must be an array');
-        } else if (gamePack.levels.length === 0) {
-            errors.push('Game pack must contain at least one level');
+    // Merge scripts
+    if (options.mergeScripts && source.scripts) {
+      for (const [scriptId, scriptData] of Object.entries(source.scripts)) {
+        if (merged.scripts[scriptId] && !options.overwriteConflicts) {
+          conflicts.push(`Script: ${scriptId}`);
         } else {
-            gamePack.levels.forEach((level, index) => {
-                const levelErrors = this.validateLevel(level);
-                levelErrors.forEach(error => {
-                    errors.push(`Level ${index}: ${error}`);
-                });
-            });
+          merged.scripts[scriptId] = scriptData;
         }
-
-        // Validate metadata
-        if (!gamePack.metadata || typeof gamePack.metadata !== 'object') {
-            errors.push('Metadata must be an object');
-        }
-
-        return errors;
+      }
     }
+
+    // Merge cutscenes
+    if (options.mergeCutscenes && source.cutscenes) {
+      for (const [cutsceneId, cutsceneData] of Object.entries(source.cutscenes)) {
+        if (merged.cutscenes[cutsceneId] && !options.overwriteConflicts) {
+          conflicts.push(`Cutscene: ${cutsceneId}`);
+        } else {
+          merged.cutscenes[cutsceneId] = cutsceneData;
+        }
+      }
+    }
+
+    // Merge assets
+    if (options.mergeAssets && source.assets) {
+      for (const [assetId, assetData] of Object.entries(source.assets)) {
+        if (merged.assets[assetId] && !options.overwriteConflicts) {
+          conflicts.push(`Asset: ${assetId}`);
+        } else {
+          merged.assets[assetId] = assetData;
+        }
+      }
+    }
+
+    return {
+      success: conflicts.length === 0,
+      conflicts,
+      merged
+    };
+  }
+
+  validateGamePack(gamePack: GamePack): string[] {
+    const errors: string[] = [];
+
+    // Validate pack structure
+    if (!gamePack.id || !gamePack.name) {
+      errors.push('Game pack must have id and name');
+    }
+
+    // Validate scripts
+    if (gamePack.scripts) {
+      for (const [scriptId, script] of Object.entries(gamePack.scripts)) {
+        try {
+          const scriptErrors = this.exportManager.validateScript(script);
+          if (scriptErrors.length > 0) {
+            errors.push(`Script ${scriptId}: ${scriptErrors.join(', ')}`);
+          }
+        } catch (error) {
+          errors.push(`Script ${scriptId} validation error: ${error}`);
+        }
+      }
+    }
+
+    // Validate cutscenes
+    if (gamePack.cutscenes) {
+      for (const [cutsceneId, cutscene] of Object.entries(gamePack.cutscenes)) {
+        try {
+          const cutsceneErrors = this.exportManager.validateCutscene(cutscene);
+          if (cutsceneErrors.length > 0) {
+            errors.push(`Cutscene ${cutsceneId}: ${cutsceneErrors.join(', ')}`);
+          }
+        } catch (error) {
+          errors.push(`Cutscene ${cutsceneId} validation error: ${error}`);
+        }
+      }
+    }
+
+    // Validate levels
+    if (gamePack.levels) {
+      for (const [levelId, level] of Object.entries(gamePack.levels)) {
+        const levelErrors = this.exportManager.getSchemaErrors('level', level);
+        if (levelErrors.length > 0) {
+          errors.push(`Level ${levelId}: ${levelErrors.join(', ')}`);
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  getImportPreview(file: File): Promise<{
+    success: boolean;
+    preview?: {
+      packInfo: any;
+      levelCount: number;
+      scriptCount: number;
+      cutsceneCount: number;
+      assetCount: number;
+    };
+    errors?: string[];
+  }> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const zip = new JSZip();
+          const zipData = await zip.loadAsync(e.target?.result as ArrayBuffer);
+
+          const packFile = zipData.file('pack.json');
+          if (!packFile) {
+            resolve({ success: false, errors: ['No pack.json found'] });
+            return;
+          }
+
+          const packInfo = JSON.parse(await packFile.async('text'));
+          
+          const levelsFolder = zipData.folder('levels');
+          const scriptsFolder = zipData.folder('scripts');
+          const cutscenesFolder = zipData.folder('cutscenes');
+          const assetsFolder = zipData.folder('assets');
+
+          const preview = {
+            packInfo,
+            levelCount: levelsFolder ? Object.keys(levelsFolder.files).filter(f => !f.endsWith('/')).length : 0,
+            scriptCount: scriptsFolder ? Object.keys(scriptsFolder.files).filter(f => !f.endsWith('/')).length : 0,
+            cutsceneCount: cutscenesFolder ? Object.keys(cutscenesFolder.files).filter(f => !f.endsWith('/')).length : 0,
+            assetCount: assetsFolder ? Object.keys(assetsFolder.files).filter(f => !f.endsWith('/')).length : 0
+          };
+
+          resolve({ success: true, preview });
+
+        } catch (error) {
+          resolve({ success: false, errors: [`Preview failed: ${error}`] });
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
 } 

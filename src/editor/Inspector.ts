@@ -148,7 +148,10 @@ export class Inspector {
         if (!this.propertyFields.has(entityType)) {
             this.propertyFields.set(entityType, []);
         }
-        this.propertyFields.get(entityType)!.push(field);
+        const fields = this.propertyFields.get(entityType);
+        if (fields) {
+            fields.push(field);
+        }
     }
 
     public removePropertyField(entityType: string, fieldName: string): void {
@@ -186,7 +189,8 @@ export class Inspector {
             html += '<h3>Properties</h3>';
             
             fields.forEach(field => {
-                const currentValue = this.currentEntity!.props[field.name] ?? field.defaultValue;
+                if (!this.currentEntity) return;
+        const currentValue = this.currentEntity.props[field.name] ?? field.defaultValue;
                 html += this.renderPropertyField(field, currentValue);
             });
             
@@ -252,7 +256,8 @@ export class Inspector {
         if (!this.currentEntity) return '';
 
         const customProps = Object.entries(this.currentEntity.props).filter(([key]) => {
-            const fields = this.getPropertyFields(this.currentEntity!.type);
+            if (!this.currentEntity) return;
+        const fields = this.getPropertyFields(this.currentEntity.type);
             return !fields.some(field => field.name === key);
         });
 

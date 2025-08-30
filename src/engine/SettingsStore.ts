@@ -1,288 +1,354 @@
-import { Settings, DEFAULT_SETTINGS } from './types.js';
-import { RENDERER } from './Constants.js';
+export interface Settings {
+    video: {
+        scaleMode: 'integer' | 'fit' | 'stretch';
+        fullscreen: boolean;
+        safeAreaPct: number;
+        fpsCap?: number;
+        vsync?: boolean;
+    };
+    audio: {
+        master: number;
+        music: number;
+        sfx: number;
+        muted: boolean;
+        latency: 'auto' | 'low' | 'compat';
+    };
+    input: {
+        profile: 'classic' | 'wasd' | 'custom';
+        deadzonePct: number;
+    };
+    accessibility: {
+        highContrast: boolean;
+        reduceFlashes: boolean;
+        lateJumpMs: number;
+        stickyGrab: boolean;
+    };
+    lang: string;
+}
 
-/**
- * SettingsStore - Manages persistent application settings with localStorage
- */
 export class SettingsStore {
+    private static instance: SettingsStore;
     private settings: Settings;
-    private storageKey: string;
-    private changeCallbacks: Array<(settings: Settings) => void> = [];
-    
-    constructor(storageKey: string = RENDERER.STORAGE_KEY) {
-        this.storageKey = storageKey;
-        this.settings = { ...DEFAULT_SETTINGS };
-        this.load();
+    private listeners: Map<string, Set<(value: any) => void>> = new Map();
+    private readonly STORAGE_KEY = 'pts:settings';
+
+    private constructor() {
+        this.settings = this.loadSettings();
+        this.setupStorageListener();
     }
-    
-    /**
-     * Get a setting value by path (e.g., 'video.scaleMode')
-     */
-    public get<T>(path: string): T {
-        const keys = path.split('.');
-        let value: any = this.settings;
-        
-        for (const key of keys) {
-            if (value && typeof value === 'object' && key in value) {
-                value = value[key];
-            } else {
-                console.warn(`SettingsStore: Path '${path}' not found, returning undefined`);
-                return undefined as T;
-            }
+
+    public static getInstance(): SettingsStore {
+        if (!SettingsStore.instance) {
+            SettingsStore.instance = new SettingsStore();
         }
-        
-        return value as T;
+        return SettingsStore.instance;
     }
-    
-    /**
-     * Set a setting value by path (e.g., 'video.scaleMode', 'integer')
-     */
-    public set<T>(path: string, value: T): void {
-        const keys = path.split('.');
-        const lastKey = keys.pop()!;
-        let current: any = this.settings;
-        
-        // Navigate to the parent object
-        for (const key of keys) {
-            if (!(key in current) || typeof current[key] !== 'object') {
-                current[key] = {};
-            }
-            current = current[key];
-        }
-        
-        // Set the value
-        current[lastKey] = value;
-        
-        // Save and notify
-        this.save();
-        this.notifyChangeCallbacks();
-        
-        console.log(`SettingsStore: Set '${path}' to ${JSON.stringify(value)}`);
+
+    private getDefaultSettings(): Settings {
+        return {
+            video: {
+                scaleMode: 'integer',
+                fullscreen: false,
+                safeAreaPct: 0.9,
+                fpsCap: 60,
+                vsync: true
+            },
+            audio: {
+                master: 1.0,
+                music: 0.8,
+                sfx: 0.9,
+                muted: true, // Start muted for autoplay safety
+                latency: 'auto'
+            },
+            input: {
+                profile: 'classic',
+                deadzonePct: 0.1
+            },
+            accessibility: {
+                highContrast: false,
+                reduceFlashes: false,
+                lateJumpMs: 100,
+                stickyGrab: false
+            },
+            lang: 'en'
+        };
     }
-    
-    /**
-     * Get all settings
-     */
-    public getAll(): Settings {
-        return { ...this.settings };
-    }
-    
-    /**
-     * Set all settings at once
-     */
-    public setAll(settings: Partial<Settings>): void {
-        this.settings = { ...this.settings, ...settings };
-        this.save();
-        this.notifyChangeCallbacks();
-        console.log('SettingsStore: All settings updated');
-    }
-    
-    /**
-     * Reset settings to defaults
-     */
-    public reset(): void {
-        this.settings = { ...DEFAULT_SETTINGS };
-        this.save();
-        this.notifyChangeCallbacks();
-        console.log('SettingsStore: Settings reset to defaults');
-    }
-    
-    /**
-     * Load settings from localStorage
-     */
-    public load(): void {
+
+    private loadSettings(): Settings {
         try {
-            const stored = localStorage.getItem(this.storageKey);
+            const stored = localStorage.getItem(this.STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                
-                // Merge with defaults to handle missing properties
-                this.settings = this.mergeWithDefaults(parsed);
-                
-                console.log('SettingsStore: Settings loaded from localStorage');
-            } else {
-                console.log('SettingsStore: No stored settings found, using defaults');
+                // Merge with defaults to ensure all properties exist
+                return this.mergeWithDefaults(parsed);
             }
         } catch (error) {
-            console.error('SettingsStore: Failed to load settings from localStorage:', error);
-            console.log('SettingsStore: Using default settings');
+            console.error('Failed to load settings from localStorage:', error);
         }
+        return this.getDefaultSettings();
     }
-    
-    /**
-     * Save settings to localStorage
-     */
-    public save(): void {
-        try {
-            localStorage.setItem(this.storageKey, JSON.stringify(this.settings));
-            console.log('SettingsStore: Settings saved to localStorage');
-        } catch (error) {
-            console.error('SettingsStore: Failed to save settings to localStorage:', error);
-        }
-    }
-    
-    /**
-     * Export settings as JSON string
-     */
-    public exportJson(): string {
-        return JSON.stringify(this.settings, null, 2);
-    }
-    
-    /**
-     * Import settings from JSON string
-     */
-    public importJson(json: string): boolean {
-        try {
-            const parsed = JSON.parse(json);
-            
-            // Validate the structure
-            if (!this.validateSettings(parsed)) {
-                throw new Error('Invalid settings structure');
-            }
-            
-            // Merge with defaults
-            this.settings = this.mergeWithDefaults(parsed);
-            
-            // Save and notify
-            this.save();
-            this.notifyChangeCallbacks();
-            
-            console.log('SettingsStore: Settings imported successfully');
-            return true;
-        } catch (error) {
-            console.error('SettingsStore: Failed to import settings:', error);
-            return false;
-        }
-    }
-    
-    /**
-     * Add a change callback
-     */
-    public onChange(callback: (settings: Settings) => void): void {
-        this.changeCallbacks.push(callback);
-    }
-    
-    /**
-     * Remove a change callback
-     */
-    public removeChangeCallback(callback: (settings: Settings) => void): void {
-        const index = this.changeCallbacks.indexOf(callback);
-        if (index > -1) {
-            this.changeCallbacks.splice(index, 1);
-        }
-    }
-    
-    /**
-     * Clear all change callbacks
-     */
-    public clearChangeCallbacks(): void {
-        this.changeCallbacks = [];
-    }
-    
-    /**
-     * Merge loaded settings with defaults
-     */
-    private mergeWithDefaults(loaded: any): Settings {
-        const merged = { ...DEFAULT_SETTINGS };
-        
-        // Deep merge function
-        const deepMerge = (target: any, source: any): any => {
-            for (const key in source) {
-                if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-                    target[key] = target[key] || {};
-                    deepMerge(target[key], source[key]);
-                } else {
-                    target[key] = source[key];
-                }
-            }
-            return target;
+
+    private mergeWithDefaults(partial: Partial<Settings>): Settings {
+        const defaults = this.getDefaultSettings();
+        return {
+            video: { ...defaults.video, ...partial.video },
+            audio: { ...defaults.audio, ...partial.audio },
+            input: { ...defaults.input, ...partial.input },
+            accessibility: { ...defaults.accessibility, ...partial.accessibility },
+            lang: partial.lang ?? defaults.lang
         };
-        
-        return deepMerge(merged, loaded);
     }
-    
-    /**
-     * Validate settings structure
-     */
-    private validateSettings(settings: any): boolean {
-        // Basic structure validation
-        const requiredSections = ['video', 'audio', 'input', 'accessibility', 'lang'];
-        
-        for (const section of requiredSections) {
-            if (!settings[section] || typeof settings[section] !== 'object') {
-                return false;
-            }
+
+    private saveSettings(): void {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.settings));
+        } catch (error) {
+            console.error('Failed to save settings to localStorage:', error);
         }
-        
-        // Validate video settings
-        const video = settings.video;
-        if (typeof video.scaleMode !== 'string' || 
-            typeof video.fullscreen !== 'boolean' || 
-            typeof video.safeAreaPct !== 'number') {
-            return false;
-        }
-        
-        // Validate audio settings
-        const audio = settings.audio;
-        if (typeof audio.master !== 'number' || 
-            typeof audio.music !== 'number' || 
-            typeof audio.sfx !== 'number' || 
-            typeof audio.muted !== 'boolean' || 
-            typeof audio.latency !== 'string') {
-            return false;
-        }
-        
-        // Validate accessibility settings
-        const accessibility = settings.accessibility;
-        if (typeof accessibility.highContrast !== 'boolean' || 
-            typeof accessibility.reduceFlashes !== 'boolean' || 
-            typeof accessibility.lateJumpMs !== 'number' || 
-            typeof accessibility.stickyGrab !== 'boolean') {
-            return false;
-        }
-        
-        return true;
     }
-    
-    /**
-     * Notify all change callbacks
-     */
-    private notifyChangeCallbacks(): void {
-        const settingsCopy = { ...this.settings };
-        this.changeCallbacks.forEach(callback => {
-            try {
-                callback(settingsCopy);
-            } catch (error) {
-                console.error('SettingsStore: Error in change callback:', error);
+
+    private setupStorageListener(): void {
+        // Listen for storage changes from other tabs/windows
+        window.addEventListener('storage', (event) => {
+            if (event.key === this.STORAGE_KEY && event.newValue) {
+                try {
+                    const newSettings = JSON.parse(event.newValue);
+                    this.settings = this.mergeWithDefaults(newSettings);
+                    this.notifyAllListeners();
+                } catch (error) {
+                    console.error('Failed to parse settings from storage event:', error);
+                }
             }
         });
     }
-    
-    /**
-     * Clear all stored settings
-     */
-    public clear(): void {
-        try {
-            localStorage.removeItem(this.storageKey);
-            this.settings = { ...DEFAULT_SETTINGS };
-            this.notifyChangeCallbacks();
-            console.log('SettingsStore: All settings cleared');
-        } catch (error) {
-            console.error('SettingsStore: Failed to clear settings:', error);
+
+    // Video settings
+    public getVideoSettings() { return this.settings.video; }
+    public setScaleMode(mode: 'integer' | 'fit' | 'stretch'): void {
+        this.settings.video.scaleMode = mode;
+        this.saveSettings();
+        this.notifyListeners('video.scaleMode', mode);
+    }
+    public setFullscreen(fullscreen: boolean): void {
+        this.settings.video.fullscreen = fullscreen;
+        this.saveSettings();
+        this.notifyListeners('video.fullscreen', fullscreen);
+    }
+    public setSafeAreaPct(pct: number): void {
+        this.settings.video.safeAreaPct = Math.max(0.1, Math.min(1.0, pct));
+        this.saveSettings();
+        this.notifyListeners('video.safeAreaPct', this.settings.video.safeAreaPct);
+    }
+    public setFpsCap(fps: number | undefined): void {
+        this.settings.video.fpsCap = fps;
+        this.saveSettings();
+        this.notifyListeners('video.fpsCap', fps);
+    }
+    public setVsync(vsync: boolean | undefined): void {
+        this.settings.video.vsync = vsync;
+        this.saveSettings();
+        this.notifyListeners('video.vsync', vsync);
+    }
+
+    // Audio settings
+    public getAudioSettings() { return this.settings.audio; }
+    public setMasterVolume(volume: number): void {
+        this.settings.audio.master = Math.max(0, Math.min(1, volume));
+        this.saveSettings();
+        this.notifyListeners('audio.master', this.settings.audio.master);
+    }
+    public setMusicVolume(volume: number): void {
+        this.settings.audio.music = Math.max(0, Math.min(1, volume));
+        this.saveSettings();
+        this.notifyListeners('audio.music', this.settings.audio.music);
+    }
+    public setSfxVolume(volume: number): void {
+        this.settings.audio.sfx = Math.max(0, Math.min(1, volume));
+        this.saveSettings();
+        this.notifyListeners('audio.sfx', this.settings.audio.sfx);
+    }
+    public setAudioMuted(muted: boolean): void {
+        this.settings.audio.muted = muted;
+        this.saveSettings();
+        this.notifyListeners('audio.muted', muted);
+    }
+    public setAudioLatency(latency: 'auto' | 'low' | 'compat'): void {
+        this.settings.audio.latency = latency;
+        this.saveSettings();
+        this.notifyListeners('audio.latency', latency);
+    }
+
+    // Input settings
+    public getInputSettings() { return this.settings.input; }
+    public setInputProfile(profile: 'classic' | 'wasd' | 'custom'): void {
+        this.settings.input.profile = profile;
+        this.saveSettings();
+        this.notifyListeners('input.profile', profile);
+    }
+    public setDeadzonePct(pct: number): void {
+        this.settings.input.deadzonePct = Math.max(0, Math.min(0.5, pct));
+        this.saveSettings();
+        this.notifyListeners('input.deadzonePct', this.settings.input.deadzonePct);
+    }
+
+    // Accessibility settings
+    public getAccessibilitySettings() { return this.settings.accessibility; }
+    public setHighContrast(highContrast: boolean): void {
+        this.settings.accessibility.highContrast = highContrast;
+        this.saveSettings();
+        this.notifyListeners('accessibility.highContrast', highContrast);
+    }
+    public setReduceFlashes(reduceFlashes: boolean): void {
+        this.settings.accessibility.reduceFlashes = reduceFlashes;
+        this.saveSettings();
+        this.notifyListeners('accessibility.reduceFlashes', reduceFlashes);
+    }
+    public setLateJumpMs(ms: number): void {
+        this.settings.accessibility.lateJumpMs = Math.max(0, Math.min(500, ms));
+        this.saveSettings();
+        this.notifyListeners('accessibility.lateJumpMs', this.settings.accessibility.lateJumpMs);
+    }
+    public setStickyGrab(stickyGrab: boolean): void {
+        this.settings.accessibility.stickyGrab = stickyGrab;
+        this.saveSettings();
+        this.notifyListeners('accessibility.stickyGrab', stickyGrab);
+    }
+
+    // Language settings
+    public getLanguage(): string { return this.settings.lang; }
+    public setLanguage(lang: string): void {
+        this.settings.lang = lang;
+        this.saveSettings();
+        this.notifyListeners('lang', lang);
+    }
+
+    // Event system
+    public addListener(path: string, callback: (value: any) => void): void {
+        if (!this.listeners.has(path)) {
+            this.listeners.set(path, new Set());
+        }
+        
+        const pathListeners = this.listeners.get(path);
+        if (pathListeners) {
+            pathListeners.add(callback);
         }
     }
-    
-    /**
-     * Get storage key
-     */
-    public getStorageKey(): string {
-        return this.storageKey;
+
+    public removeListener(path: string, callback: (value: any) => void): void {
+        const pathListeners = this.listeners.get(path);
+        if (pathListeners) {
+            pathListeners.delete(callback);
+            if (pathListeners.size === 0) {
+                this.listeners.delete(path);
+            }
+        }
     }
-    
-    /**
-     * Check if settings are stored
-     */
-    public hasStoredSettings(): boolean {
-        return localStorage.getItem(this.storageKey) !== null;
+
+    private notifyListeners(path: string, value: any): void {
+        const pathListeners = this.listeners.get(path);
+        if (pathListeners) {
+            pathListeners.forEach(callback => {
+                try {
+                    callback(value);
+                } catch (error) {
+                    console.error(`Error in settings listener for ${path}:`, error);
+                }
+            });
+        }
+    }
+
+    private notifyAllListeners(): void {
+        // Notify all registered listeners with current values
+        this.listeners.forEach((callbacks, path) => {
+            const value = this.getValueByPath(path);
+            callbacks.forEach(callback => {
+                try {
+                    callback(value);
+                } catch (error) {
+                    console.error(`Error in settings listener for ${path}:`, error);
+                }
+            });
+        });
+    }
+
+    private getValueByPath(path: string): any {
+        const parts = path.split('.');
+        let current: any = this.settings;
+        for (const part of parts) {
+            if (current && typeof current === 'object' && part in current) {
+                current = current[part];
+            } else {
+                return undefined;
+            }
+        }
+        return current;
+    }
+
+    // Utility methods
+    public getAllSettings(): Settings {
+        return { ...this.settings };
+    }
+
+    // Generic getter/setter methods for PiMenu compatibility
+    public get<T>(path: string): T | undefined {
+        return this.getValueByPath(path) as T;
+    }
+
+    public set(path: string, value: any): void {
+        const parts = path.split('.');
+        let current: any = this.settings;
+        
+        // Navigate to the parent object
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (current && typeof current === 'object' && parts[i] in current) {
+                current = current[parts[i]];
+            } else {
+                return; // Path doesn't exist
+            }
+        }
+        
+        // Set the value
+        const lastPart = parts[parts.length - 1];
+        if (current && typeof current === 'object' && lastPart in current) {
+            current[lastPart] = value;
+            this.saveSettings();
+            this.notifyListeners(path, value);
+        }
+    }
+
+    public getAll(): Settings {
+        return { ...this.settings };
+    }
+
+    public onChange(callback: (settings: Settings) => void): void {
+        // Add a listener for all changes
+        this.addListener('*', callback);
+    }
+
+    public clearChangeCallbacks(): void {
+        this.listeners.clear();
+    }
+
+    public resetToDefaults(): void {
+        this.settings = this.getDefaultSettings();
+        this.saveSettings();
+        this.notifyAllListeners();
+    }
+
+    public exportSettings(): string {
+        return JSON.stringify(this.settings, null, 2);
+    }
+
+    public importSettings(jsonString: string): boolean {
+        try {
+            const imported = JSON.parse(jsonString);
+            this.settings = this.mergeWithDefaults(imported);
+            this.saveSettings();
+            this.notifyAllListeners();
+            return true;
+        } catch (error) {
+            console.error('Failed to import settings:', error);
+            return false;
+        }
     }
 } 

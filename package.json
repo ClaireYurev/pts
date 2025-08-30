@@ -9,9 +9,14 @@
     "serve": "npx http-server . -p 8080 -c-1",
     "start": "npm run build && npm run serve"
   },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "ajv": "^8.12.0"
+  },
   "devDependencies": {
     "typescript": "^5.0.0",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "@types/jszip": "^3.4.1"
   },
   "keywords": ["game", "typescript", "canvas", "prince-of-persia"],
   "author": "",

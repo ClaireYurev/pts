@@ -34,16 +34,37 @@ export class PhysicsEngine {
         const clampedDt = Math.max(0, Math.min(dt, 1/30)); // Cap at 30 FPS equivalent
         
         for (const entity of entities) {
-            if (!entity || !entity.isStatic) {
-                // Apply gravity
-                entity.velocity.y += this.gravity * clampedDt;
+            if (!entity) {
+                console.warn("Null entity encountered in physics update, skipping");
+                continue;
+            }
+            
+            if (!entity.isStatic) {
+                // Validate entity properties before physics calculations
+                if (!this.validateEntity(entity)) {
+                    console.warn("Invalid entity detected, resetting to safe values");
+                    this.resetEntityToSafeState(entity);
+                    continue;
+                }
                 
-                // Apply friction
-                entity.velocity.x *= this.friction;
+                // Apply gravity with bounds checking
+                const gravityForce = this.gravity * clampedDt;
+                if (isFinite(gravityForce)) {
+                    entity.velocity.y += gravityForce;
+                }
                 
-                // Update position
-                entity.position.x += entity.velocity.x * clampedDt;
-                entity.position.y += entity.velocity.y * clampedDt;
+                // Apply friction with bounds checking
+                const frictionFactor = Math.max(0, Math.min(1, this.friction));
+                entity.velocity.x *= frictionFactor;
+                
+                // Update position with bounds checking
+                const deltaX = entity.velocity.x * clampedDt;
+                const deltaY = entity.velocity.y * clampedDt;
+                
+                if (isFinite(deltaX) && isFinite(deltaY)) {
+                    entity.position.x += deltaX;
+                    entity.position.y += deltaY;
+                }
                 
                 // Prevent infinite falling
                 if (entity.position.y > this.floorY) {
@@ -52,30 +73,132 @@ export class PhysicsEngine {
                 }
                 
                 // Prevent NaN values and extreme values
-                if (isNaN(entity.position.x) || isNaN(entity.position.y) ||
-                    !isFinite(entity.position.x) || !isFinite(entity.position.y)) {
+                if (!this.validateEntityPosition(entity)) {
                     console.warn("Invalid position detected, resetting entity");
-                    entity.position.x = 0;
-                    entity.position.y = 0;
-                    entity.velocity.x = 0;
-                    entity.velocity.y = 0;
+                    this.resetEntityToSafeState(entity);
+                    continue;
                 }
                 
-                        // Prevent runaway velocity values
-        if (Math.abs(entity.velocity.x) > this.maxVelocity) {
-            entity.velocity.x = Math.sign(entity.velocity.x) * this.maxVelocity;
+                // Prevent runaway velocity values
+                if (Math.abs(entity.velocity.x) > this.maxVelocity) {
+                    entity.velocity.x = Math.sign(entity.velocity.x) * this.maxVelocity;
+                }
+                if (Math.abs(entity.velocity.y) > this.maxVelocity) {
+                    entity.velocity.y = Math.sign(entity.velocity.y) * this.maxVelocity;
+                }
+                
+                // Validate final state
+                if (!this.validateEntity(entity)) {
+                    console.warn("Entity became invalid after physics update, resetting");
+                    this.resetEntityToSafeState(entity);
+                }
+            }
         }
-        if (Math.abs(entity.velocity.y) > this.maxVelocity) {
-            entity.velocity.y = Math.sign(entity.velocity.y) * this.maxVelocity;
+    }
+
+    /**
+     * Validate entity properties
+     */
+    private validateEntity(entity: Entity): boolean {
+        if (!entity || typeof entity !== 'object') {
+            return false;
         }
         
-        // Ensure velocity values are finite
-        if (!isFinite(entity.velocity.x) || !isFinite(entity.velocity.y)) {
-            console.warn("Non-finite velocity detected, resetting to zero");
-            entity.velocity.x = 0;
-            entity.velocity.y = 0;
+        // Check if entity has required properties
+        if (!entity.position || !entity.velocity) {
+            return false;
         }
+        
+        // Validate position
+        if (!this.validateEntityPosition(entity)) {
+            return false;
+        }
+        
+        // Validate velocity
+        if (!this.validateEntityVelocity(entity)) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Validate entity position
+     */
+    private validateEntityPosition(entity: Entity): boolean {
+        if (!entity.position) {
+            return false;
+        }
+        
+        const { x, y } = entity.position;
+        
+        // Check for NaN or infinite values
+        if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
+            return false;
+        }
+        
+        // Check for extreme values (prevent entities from going too far)
+        const maxPosition = 1000000; // 1 million units
+        if (Math.abs(x) > maxPosition || Math.abs(y) > maxPosition) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Validate entity velocity
+     */
+    private validateEntityVelocity(entity: Entity): boolean {
+        if (!entity.velocity) {
+            return false;
+        }
+        
+        const { x, y } = entity.velocity;
+        
+        // Check for NaN or infinite values
+        if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
+            return false;
+        }
+        
+        // Check for extreme values
+        const maxVelocity = 10000; // 10,000 units per second
+        if (Math.abs(x) > maxVelocity || Math.abs(y) > maxVelocity) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Reset entity to safe state
+     */
+    private resetEntityToSafeState(entity: Entity): void {
+        if (!entity) {
+            return;
+        }
+        
+        try {
+            // Reset position to origin
+            if (entity.position) {
+                entity.position.x = 0;
+                entity.position.y = 0;
             }
+            
+            // Reset velocity to zero
+            if (entity.velocity) {
+                entity.velocity.x = 0;
+                entity.velocity.y = 0;
+            }
+            
+            // Reset other properties if they exist
+            if ('health' in entity && typeof entity.health === 'number') {
+                entity.health = Math.max(0, Math.min(9999, entity.health || 100));
+            }
+            
+            console.log("Entity reset to safe state");
+        } catch (error) {
+            console.error("Error resetting entity to safe state:", error);
         }
     }
 

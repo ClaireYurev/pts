@@ -5,366 +5,365 @@
 export class VFS {
     constructor(config = {}) {
         this.cache = new Map();
-        this.idb = null;
+        this.cacheSize = 0;
+        this.stats = {
+            totalRequests: 0,
+            cacheHits: 0,
+            cacheMisses: 0,
+            totalSize: 0,
+            cachedFiles: 0
+        };
         this.config = {
+            builtInPath: '/assets/',
             cacheEnabled: true,
+            maxCacheSize: 50 * 1024 * 1024, // 50MB default
             cacheExpiryHours: 24,
-            maxCacheSize: 50 * 1024 * 1024, // 50MB
             ...config
         };
-        if (this.config.cacheEnabled) {
-            this.initCache();
-        }
-    }
-    async initCache() {
-        try {
-            const request = indexedDB.open('VFS-Cache', 1);
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('vfs-cache')) {
-                    const store = db.createObjectStore('vfs-cache', { keyPath: 'hash' });
-                    store.createIndex('timestamp', 'timestamp', { unique: false });
-                }
-            };
-            request.onsuccess = () => {
-                this.idb = request.result;
-            };
-            request.onerror = () => {
-                console.warn('Failed to initialize VFS cache, continuing without cache');
-            };
-        }
-        catch (error) {
-            console.warn('VFS cache initialization failed:', error);
-        }
     }
     /**
-     * Read JSON data from path or URL
+     * Read JSON data from various sources
      */
-    async readJson(pathOrUrl) {
+    async readJson(path) {
+        this.stats.totalRequests++;
+        // Check cache first
+        const cacheKey = `json:${path}`;
+        if (this.config.cacheEnabled && this.cache.has(cacheKey)) {
+            this.stats.cacheHits++;
+            return this.cache.get(cacheKey);
+        }
+        this.stats.cacheMisses++;
         try {
-            // Check cache first
-            const cached = await this.getFromCache(pathOrUrl, 'json');
-            if (cached) {
-                return cached;
-            }
             let data;
-            if (this.isUrl(pathOrUrl)) {
-                data = await this.fetchFromUrl(pathOrUrl);
+            if (this.isBuiltInPath(path)) {
+                data = await this.readBuiltInJson(path);
+            }
+            else if (this.isUrl(path)) {
+                data = await this.readUrlJson(path);
+            }
+            else if (this.isFile(path)) {
+                data = await this.readFileJson(path);
             }
             else {
-                data = await this.fetchFromPath(pathOrUrl);
-            }
-            // Validate JSON
-            if (typeof data === 'string') {
-                data = JSON.parse(data);
+                throw new Error(`Unsupported path format: ${path}`);
             }
             // Cache the result
-            await this.setCache(pathOrUrl, data, 'json');
+            if (this.config.cacheEnabled) {
+                this.cacheData(cacheKey, data);
+            }
             return data;
         }
         catch (error) {
-            console.error(`Failed to read JSON from ${pathOrUrl}:`, error);
+            console.error(`Failed to read JSON from ${path}:`, error);
             throw error;
         }
     }
     /**
-     * Read image data from path or URL
+     * Read image data from various sources
      */
-    async readImage(pathOrUrl) {
-        try {
-            // Check cache first
-            const cached = await this.getFromCache(pathOrUrl, 'image');
-            if (cached) {
-                return cached;
-            }
-            const image = new Image();
-            return new Promise((resolve, reject) => {
-                image.onload = async () => {
-                    try {
-                        await this.setCache(pathOrUrl, image, 'image');
-                        resolve(image);
-                    }
-                    catch (error) {
-                        console.warn('Failed to cache image:', error);
-                        resolve(image);
-                    }
-                };
-                image.onerror = () => {
-                    reject(new Error(`Failed to load image: ${pathOrUrl}`));
-                };
-                if (this.isUrl(pathOrUrl)) {
-                    image.crossOrigin = 'anonymous';
-                    image.src = pathOrUrl;
-                }
-                else {
-                    image.src = pathOrUrl;
-                }
-            });
+    async readImage(path) {
+        this.stats.totalRequests++;
+        // Check cache first
+        const cacheKey = `image:${path}`;
+        if (this.config.cacheEnabled && this.cache.has(cacheKey)) {
+            this.stats.cacheHits++;
+            return this.cache.get(cacheKey);
         }
-        catch (error) {
-            console.error(`Failed to read image from ${pathOrUrl}:`, error);
-            throw error;
-        }
-    }
-    /**
-     * Read audio data from path or URL
-     */
-    async readAudio(pathOrUrl) {
+        this.stats.cacheMisses++;
         try {
-            // Check cache first
-            const cached = await this.getFromCache(pathOrUrl, 'audio');
-            if (cached) {
-                return cached;
+            let image;
+            if (this.isBuiltInPath(path)) {
+                image = await this.loadBuiltInImage(path);
             }
-            let response;
-            if (this.isUrl(pathOrUrl)) {
-                response = await fetch(pathOrUrl, {
-                    mode: 'cors',
-                    credentials: 'omit'
-                });
+            else if (this.isUrl(path)) {
+                image = await this.loadUrlImage(path);
+            }
+            else if (this.isFile(path)) {
+                image = await this.loadFileImage(path);
             }
             else {
-                response = await fetch(pathOrUrl);
+                throw new Error(`Unsupported path format: ${path}`);
             }
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const arrayBuffer = await response.arrayBuffer();
             // Cache the result
-            await this.setCache(pathOrUrl, arrayBuffer, 'audio');
-            return arrayBuffer;
+            if (this.config.cacheEnabled) {
+                this.cacheData(cacheKey, image);
+            }
+            return image;
         }
         catch (error) {
-            console.error(`Failed to read audio from ${pathOrUrl}:`, error);
+            console.error(`Failed to read image from ${path}:`, error);
             throw error;
         }
     }
     /**
-     * Read local file from File object
+     * Read audio data from various sources
      */
-    async readLocalFile(file) {
+    async readAudio(path) {
+        this.stats.totalRequests++;
+        // Check cache first
+        const cacheKey = `audio:${path}`;
+        if (this.config.cacheEnabled && this.cache.has(cacheKey)) {
+            this.stats.cacheHits++;
+            return this.cache.get(cacheKey);
+        }
+        this.stats.cacheMisses++;
         try {
-            const extension = file.name.split('.').pop()?.toLowerCase();
-            if (extension === 'json') {
-                const text = await file.text();
-                return JSON.parse(text);
+            let audioData;
+            if (this.isBuiltInPath(path)) {
+                audioData = await this.readBuiltInAudio(path);
             }
-            else if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '')) {
-                return new Promise((resolve, reject) => {
-                    const image = new Image();
-                    image.onload = () => resolve(image);
-                    image.onerror = () => reject(new Error('Failed to load image'));
-                    image.src = URL.createObjectURL(file);
-                });
+            else if (this.isUrl(path)) {
+                audioData = await this.readUrlAudio(path);
             }
-            else if (['mp3', 'wav', 'ogg', 'webm'].includes(extension || '')) {
-                return await file.arrayBuffer();
+            else if (this.isFile(path)) {
+                audioData = await this.readFileAudio(path);
             }
             else {
-                throw new Error(`Unsupported file type: ${extension}`);
+                throw new Error(`Unsupported path format: ${path}`);
             }
+            // Cache the result
+            if (this.config.cacheEnabled) {
+                this.cacheData(cacheKey, audioData);
+            }
+            return audioData;
         }
         catch (error) {
-            console.error('Failed to read local file:', error);
+            console.error(`Failed to read audio from ${path}:`, error);
             throw error;
         }
     }
     /**
-     * Install local file to cache
+     * Read text data from various sources
      */
-    async installLocalFile(file, id) {
+    async readText(path) {
+        this.stats.totalRequests++;
+        // Check cache first
+        const cacheKey = `text:${path}`;
+        if (this.config.cacheEnabled && this.cache.has(cacheKey)) {
+            this.stats.cacheHits++;
+            return this.cache.get(cacheKey);
+        }
+        this.stats.cacheMisses++;
         try {
-            const data = await this.readLocalFile(file);
-            const hash = await this.generateHash(file.name + file.size + file.lastModified);
-            await this.setCacheToDB(hash, data, this.getFileType(file.name));
-            console.log(`Installed local file ${file.name} as ${id}`);
+            let text;
+            if (this.isBuiltInPath(path)) {
+                text = await this.readBuiltInText(path);
+            }
+            else if (this.isUrl(path)) {
+                text = await this.readUrlText(path);
+            }
+            else if (this.isFile(path)) {
+                text = await this.readFileText(path);
+            }
+            else {
+                throw new Error(`Unsupported path format: ${path}`);
+            }
+            // Cache the result
+            if (this.config.cacheEnabled) {
+                this.cacheData(cacheKey, text);
+            }
+            return text;
         }
         catch (error) {
-            console.error('Failed to install local file:', error);
+            console.error(`Failed to read text from ${path}:`, error);
             throw error;
         }
     }
-    isUrl(pathOrUrl) {
-        return pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://');
+    // Built-in asset handling
+    async readBuiltInJson(path) {
+        const fullPath = this.config.builtInPath + path;
+        const response = await fetch(fullPath);
+        if (!response.ok) {
+            throw new Error(`Failed to load built-in JSON: ${response.statusText}`);
+        }
+        return response.json();
     }
-    async fetchFromUrl(url) {
-        const response = await fetch(url, {
+    async readBuiltInText(path) {
+        const fullPath = this.config.builtInPath + path;
+        const response = await fetch(fullPath);
+        if (!response.ok) {
+            throw new Error(`Failed to load built-in text: ${response.statusText}`);
+        }
+        return response.text();
+    }
+    async readBuiltInAudio(path) {
+        const fullPath = this.config.builtInPath + path;
+        const response = await fetch(fullPath);
+        if (!response.ok) {
+            throw new Error(`Failed to load built-in audio: ${response.statusText}`);
+        }
+        return response.arrayBuffer();
+    }
+    loadBuiltInImage(path) {
+        return new Promise((resolve, reject) => {
+            const fullPath = this.config.builtInPath + path;
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`Failed to load built-in image: ${path}`));
+            img.src = fullPath;
+        });
+    }
+    // URL asset handling
+    async readUrlJson(path) {
+        const response = await fetch(path, {
             mode: 'cors',
-            credentials: 'omit'
+            headers: {
+                'Accept': 'application/json'
+            }
         });
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`Failed to load URL JSON: ${response.statusText}`);
         }
-        return await response.json();
+        return response.json();
     }
-    async fetchFromPath(path) {
-        const response = await fetch(path);
+    async readUrlText(path) {
+        const response = await fetch(path, {
+            mode: 'cors'
+        });
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`Failed to load URL text: ${response.statusText}`);
         }
-        return await response.json();
+        return response.text();
     }
-    async getFromCache(pathOrUrl, type) {
-        if (!this.config.cacheEnabled) {
-            return null;
+    async readUrlAudio(path) {
+        const response = await fetch(path, {
+            mode: 'cors'
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load URL audio: ${response.statusText}`);
         }
-        try {
-            const hash = await this.generateHash(pathOrUrl);
-            // Check memory cache first
-            const memoryEntry = this.cache.get(hash);
-            if (memoryEntry && memoryEntry.type === type) {
-                return memoryEntry.data;
+        return response.arrayBuffer();
+    }
+    loadUrlImage(path) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`Failed to load URL image: ${path}`));
+            img.src = path;
+        });
+    }
+    // File asset handling
+    async readFileJson(path) {
+        // For file paths, we assume it's a File object stored in memory
+        // This would typically be handled by the LibraryManager
+        throw new Error('File JSON reading not implemented - use LibraryManager');
+    }
+    async readFileText(path) {
+        // For file paths, we assume it's a File object stored in memory
+        throw new Error('File text reading not implemented - use LibraryManager');
+    }
+    async readFileAudio(path) {
+        // For file paths, we assume it's a File object stored in memory
+        throw new Error('File audio reading not implemented - use LibraryManager');
+    }
+    loadFileImage(path) {
+        // For file paths, we assume it's a File object stored in memory
+        return new Promise((resolve, reject) => {
+            reject(new Error('File image loading not implemented - use LibraryManager'));
+        });
+    }
+    // Path type detection
+    isBuiltInPath(path) {
+        return !path.startsWith('http') && !path.startsWith('file:') && !path.includes('://');
+    }
+    isUrl(path) {
+        return path.startsWith('http://') || path.startsWith('https://');
+    }
+    isFile(path) {
+        return path.startsWith('file:') || path.includes('://');
+    }
+    // Cache management
+    cacheData(key, data) {
+        if (!this.config.cacheEnabled)
+            return;
+        const dataSize = this.estimateDataSize(data);
+        // Check if we need to evict cache entries
+        while (this.cacheSize + dataSize > this.config.maxCacheSize && this.cache.size > 0) {
+            const firstKey = this.cache.keys().next().value;
+            if (firstKey) {
+                const firstData = this.cache.get(firstKey);
+                this.cacheSize -= this.estimateDataSize(firstData);
+                this.cache.delete(firstKey);
+                this.stats.cachedFiles--;
             }
-            // Check IndexedDB cache
-            if (this.idb) {
-                const transaction = this.idb.transaction(['vfs-cache'], 'readonly');
-                const store = transaction.objectStore('vfs-cache');
-                const request = store.get(hash);
-                return new Promise((resolve) => {
-                    request.onsuccess = () => {
-                        const entry = request.result;
-                        if (entry && entry.type === type && this.isCacheValid(entry)) {
-                            // Add to memory cache
-                            this.cache.set(hash, entry);
-                            resolve(entry.data);
-                        }
-                        else {
-                            resolve(null);
-                        }
-                    };
-                    request.onerror = () => resolve(null);
-                });
-            }
         }
-        catch (error) {
-            console.warn('Cache read failed:', error);
-        }
-        return null;
+        // Add to cache
+        this.cache.set(key, data);
+        this.cacheSize += dataSize;
+        this.stats.cachedFiles++;
+        this.stats.totalSize = this.cacheSize;
     }
-    async setCache(pathOrUrl, data, type) {
-        if (!this.config.cacheEnabled) {
-            return;
+    estimateDataSize(data) {
+        if (data instanceof ArrayBuffer) {
+            return data.byteLength;
         }
-        try {
-            const hash = await this.generateHash(pathOrUrl);
-            // Add to memory cache
-            this.cache.set(hash, {
-                hash,
-                data,
-                timestamp: Date.now(),
-                type
-            });
-            // Add to IndexedDB cache
-            await this.setCacheToDB(hash, data, type);
+        else if (data instanceof HTMLImageElement) {
+            // Rough estimate for images
+            return data.width * data.height * 4; // 4 bytes per pixel
         }
-        catch (error) {
-            console.warn('Cache write failed:', error);
+        else if (typeof data === 'string') {
+            return data.length * 2; // 2 bytes per character (UTF-16)
         }
+        else if (typeof data === 'object') {
+            return JSON.stringify(data).length * 2;
+        }
+        return 1024; // Default estimate
     }
-    async setCacheToDB(hash, data, type) {
-        if (!this.idb) {
-            return;
-        }
-        try {
-            const transaction = this.idb.transaction(['vfs-cache'], 'readwrite');
-            const store = transaction.objectStore('vfs-cache');
-            const entry = {
-                hash,
-                data,
-                timestamp: Date.now(),
-                type
-            };
-            await new Promise((resolve, reject) => {
-                const request = store.put(entry);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-            // Clean up old entries
-            await this.cleanupCache();
-        }
-        catch (error) {
-            console.warn('IndexedDB cache write failed:', error);
-        }
-    }
-    isCacheValid(entry) {
-        const expiryTime = this.config.cacheExpiryHours * 60 * 60 * 1000;
-        return Date.now() - entry.timestamp < expiryTime;
-    }
-    async cleanupCache() {
-        if (!this.idb) {
-            return;
-        }
-        try {
-            const transaction = this.idb.transaction(['vfs-cache'], 'readwrite');
-            const store = transaction.objectStore('vfs-cache');
-            const index = store.index('timestamp');
-            const cutoffTime = Date.now() - (this.config.cacheExpiryHours * 60 * 60 * 1000);
-            const request = index.openCursor(IDBKeyRange.upperBound(cutoffTime));
-            request.onsuccess = () => {
-                const cursor = request.result;
-                if (cursor) {
-                    cursor.delete();
-                    cursor.continue();
-                }
-            };
-        }
-        catch (error) {
-            console.warn('Cache cleanup failed:', error);
-        }
-    }
-    async generateHash(input) {
-        // Simple hash function for caching
-        let hash = 0;
-        for (let i = 0; i < input.length; i++) {
-            const char = input.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // Convert to 32-bit integer
-        }
-        return hash.toString(36);
-    }
-    getFileType(filename) {
-        const extension = filename.split('.').pop()?.toLowerCase();
-        if (extension === 'json') {
-            return 'json';
-        }
-        else if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(extension || '')) {
-            return 'image';
-        }
-        else if (['mp3', 'wav', 'ogg', 'webm'].includes(extension || '')) {
-            return 'audio';
-        }
-        else {
-            return 'json'; // Default
-        }
-    }
-    /**
-     * Clear all cached data
-     */
-    async clearCache() {
+    // Cache control
+    clearCache() {
         this.cache.clear();
-        if (this.idb) {
-            try {
-                const transaction = this.idb.transaction(['vfs-cache'], 'readwrite');
-                const store = transaction.objectStore('vfs-cache');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            catch (error) {
-                console.warn('Failed to clear IndexedDB cache:', error);
-            }
+        this.cacheSize = 0;
+        this.stats.cachedFiles = 0;
+        this.stats.totalSize = 0;
+    }
+    getCacheStats() {
+        return { ...this.stats };
+    }
+    setCacheEnabled(enabled) {
+        this.config.cacheEnabled = enabled;
+        if (!enabled) {
+            this.clearCache();
         }
     }
-    /**
-     * Get cache statistics
-     */
-    getCacheStats() {
-        return {
-            memoryEntries: this.cache.size,
-            totalSize: 0 // TODO: Calculate actual size
-        };
+    setMaxCacheSize(size) {
+        this.config.maxCacheSize = size;
+        // Evict excess cache entries
+        while (this.cacheSize > size && this.cache.size > 0) {
+            const firstKey = this.cache.keys().next().value;
+            if (firstKey) {
+                const firstData = this.cache.get(firstKey);
+                this.cacheSize -= this.estimateDataSize(firstData);
+                this.cache.delete(firstKey);
+                this.stats.cachedFiles--;
+            }
+        }
+        this.stats.totalSize = this.cacheSize;
+    }
+    // Utility methods
+    async validatePath(path) {
+        try {
+            if (this.isBuiltInPath(path)) {
+                const response = await fetch(this.config.builtInPath + path, { method: 'HEAD' });
+                return response.ok;
+            }
+            else if (this.isUrl(path)) {
+                const response = await fetch(path, { method: 'HEAD', mode: 'cors' });
+                return response.ok;
+            }
+            return false;
+        }
+        catch {
+            return false;
+        }
+    }
+    getSupportedFormats() {
+        return ['json', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp3', 'wav', 'ogg', 'txt'];
+    }
+    // For compatibility with LibraryManager
+    get vfs() {
+        return this;
     }
 }
 //# sourceMappingURL=VFS.js.map

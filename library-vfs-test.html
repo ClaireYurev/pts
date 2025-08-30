@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibraryManager & VFS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .packs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .pack-item {
+            background: #3a3a3a;
+            border-radius: 8px;
+            padding: 15px;
+            border: 2px solid #4a4a4a;
+            transition: all 0.3s ease;
+        }
+        .pack-item:hover {
+            border-color: #5a5a5a;
+            background: #404040;
+        }
+        .pack-thumbnail {
+            width: 100%;
+            height: 120px;
+            background: #2a2a2a;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .pack-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .pack-info {
+            margin-bottom: 15px;
+        }
+        .pack-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .pack-description {
+            color: #ccc;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .pack-meta {
+            color: #999;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .pack-actions {
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background: #5a5a5a;
+        }
+        button:disabled {
+            background: #2a2a2a;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .play-btn {
+            background: #28a745;
+        }
+        .play-btn:hover {
+            background: #218838;
+        }
+        .install-btn {
+            background: #007bff;
+        }
+        .install-btn:hover {
+            background: #0056b3;
+        }
+        .remove-btn {
+            background: #dc3545;
+        }
+        .remove-btn:hover {
+            background: #c82333;
+        }
+        .status {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        .tab-btn {
+            background: #4a4a4a;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .tab-btn.active {
+            background: #007bff;
+        }
+        .panel {
+            display: none;
+        }
+        .panel.active {
+            display: block;
+        }
+        .vfs-stats {
+            background: #333;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>LibraryManager & VFS Test</h1>
+    
+    <div class="test-section">
+        <h2>System Status</h2>
+        <div class="status" id="system-status">
+            Initializing...
+        </div>
+        <div class="controls">
+            <button id="init-system">Initialize System</button>
+            <button id="clear-cache">Clear VFS Cache</button>
+            <button id="refresh-packs">Refresh Packs</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>VFS Statistics</h2>
+        <div class="vfs-stats" id="vfs-stats">
+            VFS not initialized
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Game Library</h2>
+        
+        <div class="tab-buttons">
+            <button class="tab-btn active" data-tab="builtin">Built-in</button>
+            <button class="tab-btn" data-tab="installed">Installed</button>
+            <button class="tab-btn" data-tab="local">Local</button>
+        </div>
+
+        <div class="controls">
+            <button id="load-url">Load from URL</button>
+            <button id="load-file">Load from File</button>
+            <button id="clear-all">Clear All Packs</button>
+        </div>
+
+        <div id="builtin-panel" class="panel active">
+            <h3>Built-in Packs</h3>
+            <div class="packs-grid" id="builtin-packs">
+                <!-- Built-in packs will be loaded here -->
+            </div>
+        </div>
+
+        <div id="installed-panel" class="panel">
+            <h3>Installed Packs</h3>
+            <div class="packs-grid" id="installed-packs">
+                <!-- Installed packs will be loaded here -->
+            </div>
+        </div>
+
+        <div id="local-panel" class="panel">
+            <h3>Local Packs</h3>
+            <div class="packs-grid" id="local-packs">
+                <!-- Local packs will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { VFS } from './src/engine/assets/VFS.js';
+        import { LibraryManager } from './src/engine/library/LibraryManager.js';
+
+        let vfs = null;
+        let libraryManager = null;
+
+        // DOM elements
+        const systemStatus = document.getElementById('system-status');
+        const vfsStats = document.getElementById('vfs-stats');
+        const builtinPacks = document.getElementById('builtin-packs');
+        const installedPacks = document.getElementById('installed-packs');
+        const localPacks = document.getElementById('local-packs');
+
+        // Initialize system
+        async function initializeSystem() {
+            try {
+                systemStatus.textContent = 'Initializing VFS and LibraryManager...';
+                
+                // Create VFS
+                vfs = new VFS({
+                    builtInPath: '/assets/',
+                    cacheEnabled: true,
+                    maxCacheSize: 10 * 1024 * 1024 // 10MB
+                });
+
+                // Create LibraryManager
+                libraryManager = new LibraryManager(vfs);
+                
+                systemStatus.textContent = 'System initialized successfully';
+                
+                // Update displays
+                updateVFSStats();
+                await updatePacksDisplay();
+                
+                console.log('LibraryManager and VFS test initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+                systemStatus.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Update VFS statistics
+        function updateVFSStats() {
+            if (!vfs) return;
+
+            const stats = vfs.getCacheStats();
+            vfsStats.textContent = `VFS Statistics:
+Total Requests: ${stats.totalRequests}
+Cache Hits: ${stats.cacheHits}
+Cache Misses: ${stats.cacheMisses}
+Cache Hit Rate: ${stats.totalRequests > 0 ? ((stats.cacheHits / stats.totalRequests) * 100).toFixed(1) : 0}%
+Cached Files: ${stats.cachedFiles}
+Total Cache Size: ${(stats.totalSize / 1024 / 1024).toFixed(2)} MB`;
+        }
+
+        // Update packs display
+        async function updatePacksDisplay() {
+            if (!libraryManager) return;
+
+            try {
+                const allPacks = await libraryManager.getAllPacks();
+                
+                // Filter packs by type
+                const builtinItems = allPacks.filter(item => item.isBuiltIn);
+                const installedItems = allPacks.filter(item => !item.isBuiltIn && item.isInstalled);
+                const localItems = allPacks.filter(item => !item.isBuiltIn && !item.isInstalled);
+
+                // Update displays
+                updatePacksList(builtinPacks, builtinItems);
+                updatePacksList(installedPacks, installedItems);
+                updatePacksList(localPacks, localItems);
+
+                // Update library stats
+                const stats = libraryManager.getStats();
+                console.log('Library stats:', stats);
+            } catch (error) {
+                console.error('Failed to update packs display:', error);
+            }
+        }
+
+        // Update packs list
+        function updatePacksList(container, items) {
+            if (items.length === 0) {
+                container.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No packs available</div>';
+                return;
+            }
+
+            container.innerHTML = items.map(item => createPackElement(item)).join('');
+        }
+
+        // Create pack element
+        function createPackElement(item) {
+            const pack = item.pack;
+            const thumbnail = pack.thumbnail || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjkwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDA%2BIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+RW1wdHk8L3RleHQ+PC9zdmc+';
+            
+            return `
+                <div class="pack-item" data-pack-id="${pack.id}">
+                    <div class="pack-thumbnail">
+                        <img src="${thumbnail}" alt="${pack.name}">
+                    </div>
+                    <div class="pack-info">
+                        <div class="pack-title">${pack.name}</div>
+                        <div class="pack-description">${pack.description}</div>
+                        <div class="pack-meta">
+                            <span class="pack-author">by ${pack.author}</span>
+                            <span class="pack-version">v${pack.version}</span>
+                        </div>
+                    </div>
+                    <div class="pack-actions">
+                        <button class="play-btn" onclick="handlePackPlay('${pack.id}')">Play</button>
+                        ${item.canInstall ? `<button class="install-btn" onclick="handlePackInstall('${pack.id}')">Install</button>` : ''}
+                        ${!item.isBuiltIn ? `<button class="remove-btn" onclick="handlePackRemove('${pack.id}')">Remove</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Event handlers
+        document.getElementById('init-system').addEventListener('click', initializeSystem);
+        
+        document.getElementById('clear-cache').addEventListener('click', () => {
+            if (vfs) {
+                vfs.clearCache();
+                updateVFSStats();
+                alert('VFS cache cleared');
+            }
+        });
+
+        document.getElementById('refresh-packs').addEventListener('click', updatePacksDisplay);
+
+        document.getElementById('load-url').addEventListener('click', async () => {
+            const url = prompt('Enter pack URL:');
+            if (url && libraryManager) {
+                try {
+                    const pack = await libraryManager.addFromUrl(url);
+                    if (pack) {
+                        alert(`Pack added successfully: ${pack.name}`);
+                        await updatePacksDisplay();
+                    }
+                } catch (error) {
+                    alert(`Failed to load pack: ${error.message}`);
+                }
+            }
+        });
+
+        document.getElementById('load-file').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.ptspack.json,.json';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file && libraryManager) {
+                    try {
+                        const pack = await libraryManager.addFromFile(file);
+                        if (pack) {
+                            alert(`Pack added successfully: ${pack.name}`);
+                            await updatePacksDisplay();
+                        }
+                    } catch (error) {
+                        alert(`Failed to load pack: ${error.message}`);
+                    }
+                }
+            };
+            input.click();
+        });
+
+        document.getElementById('clear-all').addEventListener('click', () => {
+            if (libraryManager && confirm('Clear all non-built-in packs?')) {
+                libraryManager.clearAllPacks();
+                updatePacksDisplay();
+                alert('All packs cleared');
+            }
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.getAttribute('data-tab');
+                
+                // Update active tab button
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update active panel
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(`${tab}-panel`).classList.add('active');
+            });
+        });
+
+        // Pack action handlers (global functions for onclick)
+        window.handlePackPlay = async (packId) => {
+            if (libraryManager) {
+                try {
+                    const success = await libraryManager.switchPack(packId);
+                    if (success) {
+                        alert(`Switched to pack: ${packId}`);
+                    } else {
+                        alert('Failed to switch pack');
+                    }
+                } catch (error) {
+                    alert(`Failed to play pack: ${error.message}`);
+                }
+            }
+        };
+
+        window.handlePackInstall = async (packId) => {
+            if (libraryManager) {
+                try {
+                    const result = await libraryManager.installPack(packId);
+                    if (result.success) {
+                        alert(`Pack installed successfully! Size: ${(result.size || 0) / 1024 / 1024} MB`);
+                        await updatePacksDisplay();
+                    } else {
+                        alert(`Failed to install pack: ${result.error}`);
+                    }
+                } catch (error) {
+                    alert(`Failed to install pack: ${error.message}`);
+                }
+            }
+        };
+
+        window.handlePackRemove = async (packId) => {
+            if (libraryManager && confirm('Remove this pack?')) {
+                try {
+                    const success = await libraryManager.uninstallPack(packId);
+                    if (success) {
+                        alert('Pack removed successfully');
+                        await updatePacksDisplay();
+                    } else {
+                        alert('Failed to remove pack');
+                    }
+                } catch (error) {
+                    alert(`Failed to remove pack: ${error.message}`);
+                }
+            }
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('LibraryManager and VFS test page loaded');
+        });
+    </script>
+</body>
+</html> 

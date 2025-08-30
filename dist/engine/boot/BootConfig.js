@@ -1,28 +1,98 @@
+import { SettingsStore } from '../SettingsStore.js';
+// Engine defaults (lowest precedence)
+const ENGINE_DEFAULTS = {
+    level: 1,
+    cutscenes: false,
+    mute: true, // Start muted until input
+    health: 100,
+    maxhealth: 100,
+    difficulty: 'normal',
+    scale: 'integer',
+    fullscreen: false,
+    vol: 1.0,
+    music: true,
+    sfx: true,
+    latency: 'auto',
+    deadzone: 0.1,
+    jumpbuf: 100,
+    sticky: false,
+    hud: true,
+    lang: 'en',
+    fps: 60,
+    vsync: true,
+    speed: 1.0,
+    zoom: 1.0
+};
 export function parseBootConfig() {
     const params = new URLSearchParams(window.location.search);
     const config = {};
     const warnings = [];
+    // Security check: Validate URL parameters
+    const securityManager = window.ptsCore?.securityManager;
+    if (securityManager) {
+        const urlValidation = securityManager.validateUrl(window.location.href);
+        if (!urlValidation.valid) {
+            warnings.push(`URL validation failed: ${urlValidation.error}`);
+        }
+    }
     // Helper functions
     const safeParseInt = (value, min = -Infinity, max = Infinity) => {
         if (!value)
             return undefined;
+        // Security check: Validate input length
+        if (securityManager) {
+            const inputValidation = securityManager.validateInput(value, 50);
+            if (!inputValidation.valid) {
+                warnings.push(`Input validation failed: ${inputValidation.error}`);
+                return undefined;
+            }
+            value = inputValidation.sanitized || value;
+        }
         const parsed = parseInt(value);
         return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
     };
     const safeParseFloat = (value, min = -Infinity, max = Infinity) => {
         if (!value)
             return undefined;
+        // Security check: Validate input length
+        if (securityManager) {
+            const inputValidation = securityManager.validateInput(value, 50);
+            if (!inputValidation.valid) {
+                warnings.push(`Input validation failed: ${inputValidation.error}`);
+                return undefined;
+            }
+            value = inputValidation.sanitized || value;
+        }
         const parsed = parseFloat(value);
         return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
     };
     const safeParseBool = (value) => {
         if (!value)
             return undefined;
+        // Security check: Validate input
+        if (securityManager) {
+            const inputValidation = securityManager.validateInput(value, 10);
+            if (!inputValidation.valid) {
+                warnings.push(`Input validation failed: ${inputValidation.error}`);
+                return undefined;
+            }
+            value = inputValidation.sanitized || value;
+        }
         return value === '1' || value === 'true';
     };
     const sanitizeString = (value, maxLength = 100) => {
         if (!value)
             return undefined;
+        // Security check: Use SecurityManager for input validation
+        if (securityManager) {
+            const inputValidation = securityManager.validateInput(value, maxLength);
+            if (!inputValidation.valid) {
+                warnings.push(`Input validation failed: ${inputValidation.error}`);
+                return undefined;
+            }
+            return inputValidation.sanitized;
+        }
+        // Fallback to basic sanitization
         const sanitized = value.replace(/[<>\"'&]/g, '').substring(0, maxLength);
         return sanitized.length > 0 ? sanitized : undefined;
     };
@@ -104,7 +174,7 @@ export function parseBootConfig() {
     }
     if (params.has("difficulty")) {
         const difficulty = sanitizeString(params.get("difficulty"), 20);
-        if (difficulty && ['normal', 'hard', 'custom'].includes(difficulty)) {
+        if (difficulty && ['easy', 'normal', 'hard', 'extreme'].includes(difficulty)) {
             config.difficulty = difficulty;
         }
         else {
@@ -296,6 +366,77 @@ export function validateBootConfig(cfg) {
         warnings.push("Y coordinate must be between -10000 and 10000");
     }
     return warnings;
+}
+/**
+ * Resolve boot configuration with proper precedence:
+ * Engine defaults → Pack defaults → SettingsStore → URL (wins for session)
+ */
+export function resolveBootConfig(urlConfig, packDefaults) {
+    const settingsStore = SettingsStore.getInstance();
+    const settings = settingsStore.getAllSettings();
+    // Start with engine defaults
+    const resolved = { ...ENGINE_DEFAULTS };
+    // Apply pack defaults (if available)
+    if (packDefaults) {
+        Object.assign(resolved, packDefaults);
+    }
+    // Apply SettingsStore values
+    Object.assign(resolved, {
+        scale: settings.video.scaleMode,
+        fullscreen: settings.video.fullscreen,
+        fps: settings.video.fpsCap,
+        vsync: settings.video.vsync,
+        vol: settings.audio.master,
+        music: !settings.audio.muted && settings.audio.music > 0,
+        sfx: !settings.audio.muted && settings.audio.sfx > 0,
+        mute: settings.audio.muted,
+        latency: settings.audio.latency,
+        deadzone: settings.input.deadzonePct,
+        jumpbuf: settings.accessibility.lateJumpMs,
+        sticky: settings.accessibility.stickyGrab,
+        lang: settings.lang
+    });
+    // Apply URL config (highest precedence for session)
+    Object.assign(resolved, urlConfig);
+    return resolved;
+}
+/**
+ * Generate a boot link with non-default values
+ */
+export function generateBootLink(currentConfig, packDefaults) {
+    const resolved = resolveBootConfig(currentConfig, packDefaults);
+    const params = new URLSearchParams();
+    // Only include parameters that differ from engine defaults
+    Object.entries(resolved).forEach(([key, value]) => {
+        const defaultValue = ENGINE_DEFAULTS[key];
+        if (value !== undefined && value !== defaultValue) {
+            if (typeof value === 'boolean') {
+                if (value)
+                    params.set(key, '1');
+            }
+            else {
+                params.set(key, value.toString());
+            }
+        }
+    });
+    const queryString = params.toString();
+    return queryString ? `${window.location.origin}${window.location.pathname}?${queryString}` :
+        `${window.location.origin}${window.location.pathname}`;
+}
+/**
+ * Copy boot link to clipboard
+ */
+export async function copyBootLink(currentConfig, packDefaults) {
+    try {
+        const bootLink = generateBootLink(currentConfig, packDefaults);
+        await navigator.clipboard.writeText(bootLink);
+        console.log("Boot link copied to clipboard:", bootLink);
+        return true;
+    }
+    catch (error) {
+        console.error("Failed to copy boot link:", error);
+        return false;
+    }
 }
 function isValidUrl(url) {
     try {

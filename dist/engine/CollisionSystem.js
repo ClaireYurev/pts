@@ -32,7 +32,10 @@ class SpatialGrid {
             if (!this.grid.has(cellKey)) {
                 this.grid.set(cellKey, []);
             }
-            this.grid.get(cellKey).push(entity);
+            const cellEntities = this.grid.get(cellKey);
+            if (cellEntities) {
+                cellEntities.push(entity);
+            }
         }
     }
     getNearbyEntities(entity) {

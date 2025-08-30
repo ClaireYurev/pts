@@ -26,74 +26,116 @@ export class InputHandler {
     }
 
     private setupEventListeners(canvas: HTMLCanvasElement): void {
-        // Keyboard events
+        // Keyboard events with proper cleanup tracking
         const keydownListener = (e: KeyboardEvent) => {
+            if (this.abortController.signal.aborted) return;
             this.keys[e.code] = true;
-            e.preventDefault();
         };
         
         const keyupListener = (e: KeyboardEvent) => {
+            if (this.abortController.signal.aborted) return;
             this.keys[e.code] = false;
-            e.preventDefault();
         };
-
-        // Mouse events
+        
+        // Mouse events with proper cleanup tracking
         const mousedownListener = (e: MouseEvent) => {
+            if (this.abortController.signal.aborted) return;
             this.mouse.down = true;
             this.updateMousePosition(e, canvas);
-            e.preventDefault();
         };
         
         const mouseupListener = (e: MouseEvent) => {
+            if (this.abortController.signal.aborted) return;
             this.mouse.down = false;
             this.updateMousePosition(e, canvas);
-            e.preventDefault();
         };
         
         const mousemoveListener = (e: MouseEvent) => {
+            if (this.abortController.signal.aborted) return;
             this.updateMousePosition(e, canvas);
         };
-
-        const contextmenuListener = (e: MouseEvent) => {
-            e.preventDefault();
-        };
-
-        // Window focus/blur events for key state cleanup
-        const focusListener = () => {
-            // Reset all keys when window gains focus
-            this.keys = {};
-            this.previousKeys = {};
-        };
-
-        const blurListener = () => {
-            // Reset all keys when window loses focus
-            this.keys = {};
-            this.previousKeys = {};
-        };
-
-        // Add event listeners with AbortController for better cleanup
-        const signal = this.abortController.signal;
         
-        window.addEventListener("keydown", keydownListener, { signal });
-        window.addEventListener("keyup", keyupListener, { signal });
-        canvas.addEventListener("mousedown", mousedownListener, { signal });
-        canvas.addEventListener("mouseup", mouseupListener, { signal });
-        canvas.addEventListener("mousemove", mousemoveListener, { signal });
-        canvas.addEventListener("contextmenu", contextmenuListener, { signal });
-        window.addEventListener("focus", focusListener, { signal });
-        window.addEventListener("blur", blurListener, { signal });
+        // Touch events for mobile support
+        const touchstartListener = (e: TouchEvent) => {
+            if (this.abortController.signal.aborted) return;
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                this.mouse.down = true;
+                this.updateTouchPosition(e, canvas);
+            }
+        };
+        
+        const touchendListener = (e: TouchEvent) => {
+            if (this.abortController.signal.aborted) return;
+            e.preventDefault();
+            this.mouse.down = false;
+        };
+        
+        const touchmoveListener = (e: TouchEvent) => {
+            if (this.abortController.signal.aborted) return;
+            e.preventDefault();
+            this.updateTouchPosition(e, canvas);
+        };
 
-        // Store references for manual cleanup if needed
-        this.eventListeners = [
-            { element: window, type: "keydown", listener: keydownListener as (e: Event) => void },
-            { element: window, type: "keyup", listener: keyupListener as (e: Event) => void },
-            { element: canvas, type: "mousedown", listener: mousedownListener as (e: Event) => void },
-            { element: canvas, type: "mouseup", listener: mouseupListener as (e: Event) => void },
-            { element: canvas, type: "mousemove", listener: mousemoveListener as (e: Event) => void },
-            { element: canvas, type: "contextmenu", listener: contextmenuListener as (e: Event) => void },
-            { element: window, type: "focus", listener: focusListener as (e: Event) => void },
-            { element: window, type: "blur", listener: blurListener as (e: Event) => void }
+        // Add event listeners with proper tracking
+        const events = [
+            { element: document, type: 'keydown', listener: keydownListener },
+            { element: document, type: 'keyup', listener: keyupListener },
+            { element: canvas, type: 'mousedown', listener: mousedownListener },
+            { element: canvas, type: 'mouseup', listener: mouseupListener },
+            { element: canvas, type: 'mousemove', listener: mousemoveListener },
+            { element: canvas, type: 'touchstart', listener: touchstartListener },
+            { element: canvas, type: 'touchend', listener: touchendListener },
+            { element: canvas, type: 'touchmove', listener: touchmoveListener }
         ];
+
+        // Add all event listeners and track them for cleanup
+        events.forEach(({ element, type, listener }) => {
+            element.addEventListener(type, listener as EventListener, { signal: this.abortController.signal });
+            this.eventListeners.push({ element, type, listener: listener as (e: Event) => void });
+        });
+
+        // Setup resize observer with proper cleanup
+        this.setupResizeObserver(canvas);
+    }
+
+    private setupResizeObserver(canvas: HTMLCanvasElement): void {
+        try {
+            this.resizeObserver = new ResizeObserver((entries) => {
+                if (this.abortController.signal.aborted) return;
+                
+                for (const entry of entries) {
+                    if (entry.target === canvas) {
+                        // Handle canvas resize
+                        this.handleCanvasResize(canvas);
+                    }
+                }
+            });
+            
+            this.resizeObserver.observe(canvas);
+        } catch (error) {
+            console.warn('ResizeObserver not supported, falling back to window resize event');
+            const resizeListener = () => {
+                if (this.abortController.signal.aborted) return;
+                this.handleCanvasResize(canvas);
+            };
+            
+            window.addEventListener('resize', resizeListener, { signal: this.abortController.signal });
+            this.eventListeners.push({ element: window, type: 'resize', listener: resizeListener });
+        }
+    }
+
+    private handleCanvasResize(canvas: HTMLCanvasElement): void {
+        try {
+            // Update canvas size if needed
+            const rect = canvas.getBoundingClientRect();
+            if (canvas.width !== rect.width || canvas.height !== rect.height) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+        } catch (error) {
+            console.warn('Error handling canvas resize:', error);
+        }
     }
 
     public cleanup(): void {
@@ -125,6 +167,11 @@ export class InputHandler {
                 this.resizeObserver.disconnect();
                 this.resizeObserver = undefined;
             }
+            
+            // Reset all key states
+            this.keys = {};
+            this.previousKeys = {};
+            this.mouse = { x: 0, y: 0, down: false };
             
             console.log("InputHandler cleanup completed successfully");
         } catch (error) {
@@ -164,31 +211,30 @@ export class InputHandler {
         }
     }
 
-    public handleCanvasResize(canvas: HTMLCanvasElement): void {
-        try {
-            // Recalculate mouse position when canvas is resized
-            if (this.mouse.down) {
-                // If mouse is down, we need to update the position
-                // This is a simplified approach - in a real app you might want to track the resize event
-                console.log("Canvas resized, mouse position may need recalculation");
-            }
-            
-            // Add resize observer for automatic handling
-            if (!this.resizeObserver) {
-                this.resizeObserver = new ResizeObserver(() => {
-                    this.updateMousePositionFromLastEvent(canvas);
-                });
-                this.resizeObserver.observe(canvas);
-            }
-        } catch (error) {
-            console.error("Error handling canvas resize:", error);
-        }
-    }
+    private updateTouchPosition(e: TouchEvent, canvas: HTMLCanvasElement): void {
+        if (e.touches.length > 0) {
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
 
-    private updateMousePositionFromLastEvent(canvas: HTMLCanvasElement): void {
-        // This would need to be called with the last mouse event
-        // For now, we'll just log that resize happened
-        console.log("Canvas dimensions changed, mouse coordinates may be inaccurate");
+            if (rect.width <= 0 || rect.height <= 0) {
+                console.warn("Invalid canvas dimensions for touch position calculation");
+                return;
+            }
+
+            if (!isFinite(touch.clientX) || !isFinite(touch.clientY)) {
+                console.warn("Invalid client coordinates for touch position calculation");
+                return;
+            }
+
+            this.mouse.x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+            this.mouse.y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+
+            if (!isFinite(this.mouse.x) || !isFinite(this.mouse.y)) {
+                console.warn("Non-finite touch coordinates calculated, resetting to zero");
+                this.mouse.x = 0;
+                this.mouse.y = 0;
+            }
+        }
     }
 
     public isKeyDown(keyCode: string): boolean {

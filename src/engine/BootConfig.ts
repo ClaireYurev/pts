@@ -57,31 +57,96 @@ export class BootConfigManager {
   static parse(): BootConfig {
     const params = new URLSearchParams(window.location.search);
     const cfg: BootConfig = {};
-    
-    // Helper function to safely parse and validate numeric parameters
+
+    // Security check: Validate URL parameters
+    const securityManager = (window as any).ptsCore?.securityManager;
+    if (securityManager) {
+      const urlValidation = securityManager.validateUrl(window.location.href);
+      if (!urlValidation.valid) {
+        console.warn(`URL validation failed: ${urlValidation.error}`);
+      }
+    }
+
+    // Helper functions with security validation
     const safeParseInt = (value: string | null, min: number = -Infinity, max: number = Infinity): number | undefined => {
       if (!value) return undefined;
-      const parsed = parseInt(value);
+      
+      // Security check: Validate input length
+      if (securityManager) {
+        const inputValidation = securityManager.validateInput(value, 50);
+        if (!inputValidation.valid) {
+          console.warn(`Input validation failed: ${inputValidation.error}`);
+          return undefined;
+        }
+        value = inputValidation.sanitized || value;
+      }
+      
+      const parsed = parseInt(value as string);
       return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
     };
     
     const safeParseFloat = (value: string | null, min: number = -Infinity, max: number = Infinity): number | undefined => {
       if (!value) return undefined;
-      const parsed = parseFloat(value);
+      
+      // Security check: Validate input length
+      if (securityManager) {
+        const inputValidation = securityManager.validateInput(value, 50);
+        if (!inputValidation.valid) {
+          console.warn(`Input validation failed: ${inputValidation.error}`);
+          return undefined;
+        }
+        value = inputValidation.sanitized || value;
+      }
+      
+      const parsed = parseFloat(value as string);
       return !isNaN(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
     };
     
-    // Helper function to sanitize string parameters
-    const sanitizeString = (value: string | null, maxLength: number = 100): string | undefined => {
+    const safeParseBool = (value: string | null): boolean | undefined => {
       if (!value) return undefined;
-      // Remove any potentially dangerous characters and limit length
-      const sanitized = value.replace(/[<>\"'&]/g, '').substring(0, maxLength);
+      
+      // Security check: Validate input
+      if (securityManager) {
+        const inputValidation = securityManager.validateInput(value, 10);
+        if (!inputValidation.valid) {
+          console.warn(`Input validation failed: ${inputValidation.error}`);
+          return undefined;
+        }
+        value = inputValidation.sanitized || value;
+      }
+      
+      const lowerValue = value.toLowerCase();
+      return lowerValue === 'true' || lowerValue === '1' ? true : 
+             lowerValue === 'false' || lowerValue === '0' ? false : undefined;
+    };
+    
+    const safeParseString = (value: string | null, maxLength: number = 100): string | undefined => {
+      if (!value) return undefined;
+      
+      // Security check: Validate input
+      if (securityManager) {
+        const inputValidation = securityManager.validateInput(value, maxLength);
+        if (!inputValidation.valid) {
+          console.warn(`Input validation failed: ${inputValidation.error}`);
+          return undefined;
+        }
+        value = inputValidation.sanitized || value;
+      }
+      
+      // Additional sanitization: Remove HTML tags and dangerous characters
+      const sanitized = value
+        .replace(/<[^>]*>/g, '') // Remove HTML tags
+        .replace(/javascript:/gi, '') // Remove javascript: protocol
+        .replace(/on\w+\s*=/gi, '') // Remove event handlers
+        .replace(/["'<>]/g, '') // Remove dangerous characters
+        .trim();
+      
       return sanitized.length > 0 ? sanitized : undefined;
     };
     
     // Game Pack & Level
     if (params.has("pack")) {
-      const packUrl = sanitizeString(params.get("pack"), 500);
+      const packUrl = safeParseString(params.get("pack"), 500);
       if (packUrl && this.isValidUrl(packUrl)) {
         cfg.packUrl = packUrl;
       }
@@ -98,21 +163,21 @@ export class BootConfigManager {
     // Game Settings
     if (params.has("time")) cfg.time = safeParseInt(params.get("time"), 0, 999999);
     if (params.has("difficulty")) {
-      const difficulty = sanitizeString(params.get("difficulty"), 20);
+      const difficulty = safeParseString(params.get("difficulty"), 20);
       if (difficulty && this.DIFFICULTY_LEVELS.includes(difficulty)) {
         cfg.difficulty = difficulty;
       }
     }
-    if (params.has("skipCutscene")) cfg.skipCutscene = params.get("skipCutscene") === "1";
+    if (params.has("skipCutscene")) cfg.skipCutscene = safeParseBool(params.get("skipCutscene"));
     
     // Audio Settings
     if (params.has("musicVolume")) cfg.musicVolume = safeParseFloat(params.get("musicVolume"), 0, 1);
     if (params.has("sfxVolume")) cfg.sfxVolume = safeParseFloat(params.get("sfxVolume"), 0, 1);
-    if (params.has("mute")) cfg.mute = params.get("mute") === "true";
+    if (params.has("mute")) cfg.mute = safeParseBool(params.get("mute"));
     
     // Display Settings
     if (params.has("resolution")) {
-      const res = sanitizeString(params.get("resolution"), 20);
+      const res = safeParseString(params.get("resolution"), 20);
       if (res && res.includes("x")) {
         const [w, h] = res.split("x").map(n => parseInt(n));
         if (!isNaN(w) && !isNaN(h) && w >= 160 && h >= 144 && w <= 4096 && h <= 4096) {
@@ -120,9 +185,9 @@ export class BootConfigManager {
         }
       }
     }
-    if (params.has("fullscreen")) cfg.fullscreen = params.get("fullscreen") === "true";
+    if (params.has("fullscreen")) cfg.fullscreen = safeParseBool(params.get("fullscreen"));
     if (params.has("platform")) {
-      const platform = sanitizeString(params.get("platform"), 50);
+      const platform = safeParseString(params.get("platform"), 50);
       if (platform && PlatformManager.getPlatform(platform)) {
         cfg.platform = platform;
       }
@@ -130,26 +195,26 @@ export class BootConfigManager {
     
     // Input Settings
     if (params.has("inputMethod")) {
-      const inputMethod = sanitizeString(params.get("inputMethod"), 20);
+      const inputMethod = safeParseString(params.get("inputMethod"), 20);
       if (inputMethod && this.INPUT_METHODS.includes(inputMethod)) {
         cfg.inputMethod = inputMethod;
       }
     }
     
     // Accessibility
-    if (params.has("subtitles")) cfg.subtitles = params.get("subtitles") === "true";
-    if (params.has("highContrast")) cfg.highContrast = params.get("highContrast") === "true";
+    if (params.has("subtitles")) cfg.subtitles = safeParseBool(params.get("subtitles"));
+    if (params.has("highContrast")) cfg.highContrast = safeParseBool(params.get("highContrast"));
     if (params.has("lang")) {
-      const lang = sanitizeString(params.get("lang"), 10);
+      const lang = safeParseString(params.get("lang"), 10);
       if (lang && this.SUPPORTED_LANGUAGES.includes(lang)) {
         cfg.lang = lang;
       }
     }
     
     // Debug & Development
-    if (params.has("debug")) cfg.debug = params.get("debug") === "true";
+    if (params.has("debug")) cfg.debug = safeParseBool(params.get("debug"));
     if (params.has("cheats")) {
-      const cheatsParam = sanitizeString(params.get("cheats"), 200);
+      const cheatsParam = safeParseString(params.get("cheats"), 200);
       if (cheatsParam) {
         cfg.cheats = cheatsParam.split(",")
           .map(c => c.trim())
@@ -160,7 +225,7 @@ export class BootConfigManager {
     
     // Handle preset configurations
     if (params.has("preset")) {
-      const preset = sanitizeString(params.get("preset"), 50);
+      const preset = safeParseString(params.get("preset"), 50);
       if (preset) {
         const presetConfig = this.getPresetConfig(preset);
         if (presetConfig) {

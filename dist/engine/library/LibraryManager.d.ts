@@ -2,106 +2,150 @@ import { VFS } from '../assets/VFS.js';
 export interface GamePack {
     id: string;
     name: string;
-    description?: string;
+    description: string;
     version: string;
-    author?: string;
-    cover?: string;
-    levels: string[];
-    assets: {
-        images?: string[];
-        audio?: string[];
-        data?: string[];
-    };
-    metadata?: Record<string, any>;
+    author: string;
+    thumbnail?: string;
+    manifest: string;
+    type: 'built-in' | 'installed' | 'url' | 'file';
+    source: string;
+    installedAt?: number;
+    size?: number;
 }
 export interface LibraryItem {
-    id: string;
-    name: string;
-    description?: string;
-    cover?: string;
-    source: 'builtin' | 'url' | 'local';
-    urlOrKey: string;
-    installed: boolean;
-    lastPlayed?: number;
-    pack?: GamePack;
+    pack: GamePack;
+    isInstalled: boolean;
+    canInstall: boolean;
+    isBuiltIn: boolean;
 }
-export interface LibraryConfig {
-    vfs?: VFS;
-    builtinPacksPath?: string;
-    cacheEnabled?: boolean;
+export interface InstallResult {
+    success: boolean;
+    packId: string;
+    error?: string;
+    size?: number;
+}
+export interface ValidationResult {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
 }
 export declare class LibraryManager {
     private vfs;
-    private registry;
+    private builtInPacks;
+    private installedPacks;
+    private urlPacks;
+    private filePacks;
     private currentPack;
-    private config;
-    private idb;
-    constructor(config?: LibraryConfig);
-    private initLibraryDB;
+    private onPackSwitch?;
+    constructor(vfs?: VFS);
     /**
-     * Initialize the library with built-in packs
+     * Initialize the library manager
      */
     initialize(): Promise<void>;
     /**
      * Load built-in packs from manifest.json
      */
-    private loadBuiltinPacks;
+    private loadBuiltInPacks;
     /**
-     * Load registry from IndexedDB
+     * Get all available packs
      */
-    private loadRegistryFromDB;
+    getAllPacks(): Promise<LibraryItem[]>;
     /**
-     * Save registry to IndexedDB
+     * Add pack from URL
      */
-    private saveRegistryToDB;
+    addFromUrl(url: string): Promise<GamePack | null>;
     /**
-     * Get all library items
+     * Add pack from file
      */
-    getLibraryItems(): LibraryItem[];
+    addFromFile(file: File): Promise<GamePack | null>;
     /**
-     * Get a specific library item
+     * Install a pack (cache it locally)
      */
-    getLibraryItem(id: string): LibraryItem | undefined;
+    installPack(packId: string): Promise<InstallResult>;
     /**
-     * Get the currently loaded pack
+     * Uninstall a pack
      */
-    getCurrentPack(): string | null;
-    /**
-     * Load a pack from URL
-     */
-    loadPackFromUrl(url: string): Promise<LibraryItem>;
-    /**
-     * Load a pack from local file
-     */
-    loadPackFromFile(file: File): Promise<LibraryItem>;
-    /**
-     * Install a local pack to cache
-     */
-    installLocalPack(itemId: string): Promise<void>;
+    uninstallPack(packId: string): Promise<boolean>;
     /**
      * Switch to a different pack
      */
-    switchPack(packId: string): Promise<GamePack>;
+    switchPack(packId: string): Promise<boolean>;
     /**
-     * Remove a pack from the library
+     * Get current pack
      */
-    removePack(packId: string): Promise<void>;
+    getCurrentPack(): GamePack | null;
     /**
-     * Validate pack data structure
+     * Set pack switch callback
+     */
+    setPackSwitchCallback(callback: (pack: GamePack) => void): void;
+    /**
+     * Find a pack by ID
+     */
+    private findPack;
+    /**
+     * Validate pack manifest
+     */
+    private validatePackManifest;
+    /**
+     * Validate a complete pack
      */
     private validatePack;
     /**
-     * Get pack statistics
+     * Extract pack from zip file
+     */
+    private extractPackFromZip;
+    /**
+     * Calculate pack size
+     */
+    private calculatePackSize;
+    /**
+     * Validate URL format
+     */
+    private isValidUrl;
+    /**
+     * Validate file type
+     */
+    private isValidPackFile;
+    /**
+     * Validate version format
+     */
+    private isValidVersion;
+    /**
+     * Get VFS instance
+     */
+    getVFS(): VFS;
+    /**
+     * Clear all non-built-in packs
+     */
+    clearAllPacks(): void;
+    /**
+     * Get library statistics
      */
     getStats(): {
         totalPacks: number;
-        builtinPacks: number;
-        urlPacks: number;
-        localPacks: number;
+        builtInPacks: number;
         installedPacks: number;
+        urlPacks: number;
+        filePacks: number;
     };
     /**
-     * Clear all cached data
+     * Load pack from URL
+     */
+    loadPackFromUrl(url: string): Promise<void>;
+    /**
+     * Load pack from file
+     */
+    loadPackFromFile(file: File): Promise<void>;
+    /**
+     * Get library items
+     */
+    getLibraryItems(): Promise<LibraryItem[]>;
+    /**
+     * Remove pack
+     */
+    removePack(packId: string): Promise<void>;
+    /**
+     * Clear cache
      */
     clearCache(): Promise<void>;
 }

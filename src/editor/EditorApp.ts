@@ -56,10 +56,13 @@ export class EditorApp {
     }
 
     private initializeComponents(): void {
-        // Initialize canvas
-        const canvasElement = document.getElementById('editorCanvas') as HTMLCanvasElement;
+        // Initialize canvas - try both possible IDs
+        let canvasElement = document.getElementById('editorCanvas') as HTMLCanvasElement;
         if (!canvasElement) {
-            throw new Error('Editor canvas not found');
+            canvasElement = document.getElementById('levelCanvas') as HTMLCanvasElement;
+        }
+        if (!canvasElement) {
+            throw new Error('Editor canvas not found. Expected element with ID "editorCanvas" or "levelCanvas"');
         }
         this.canvas = new LevelCanvas(canvasElement);
 
@@ -76,76 +79,103 @@ export class EditorApp {
     }
 
     private setupEventListeners(): void {
-        // Tool selection
-        document.querySelectorAll('[data-tool]').forEach(button => {
+        // Tool selection - handle both data-tool and class-based selectors
+        document.querySelectorAll('[data-tool], .tool-button').forEach(button => {
             button.addEventListener('click', (e) => {
-                const tool = (e.target as HTMLElement).getAttribute('data-tool');
+                const tool = (e.target as HTMLElement).getAttribute('data-tool') || 
+                            (e.target as HTMLElement).getAttribute('data-mode');
                 if (tool) {
                     this.selectTool(tool);
                 }
             });
         });
 
-        // Sidebar tabs
-        document.querySelectorAll('.sidebar-tab').forEach(tab => {
+        // Sidebar tabs - handle multiple tab systems
+        document.querySelectorAll('.sidebar-tab, .tab-btn, .mode-btn').forEach(tab => {
             tab.addEventListener('click', (e) => {
-                const tabName = (e.target as HTMLElement).getAttribute('data-tab');
+                const tabName = (e.target as HTMLElement).getAttribute('data-tab') ||
+                               (e.target as HTMLElement).getAttribute('data-mode');
                 if (tabName) {
                     this.switchTab(tabName);
                 }
             });
         });
 
-        // Tile palette
-        document.querySelectorAll('[data-tile]').forEach(item => {
+        // Tile palette - handle both data-tile and palette-item selectors
+        document.querySelectorAll('[data-tile], .palette-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                const tile = (e.target as HTMLElement).getAttribute('data-tile');
+                const tile = (e.target as HTMLElement).getAttribute('data-tile') ||
+                            (e.target as HTMLElement).textContent?.trim().toLowerCase();
                 if (tile) {
                     this.selectTile(tile);
                 }
             });
         });
 
-        // Entity palette
-        document.querySelectorAll('[data-entity]').forEach(item => {
+        // Entity palette - handle both data-entity and entity-item selectors
+        document.querySelectorAll('[data-entity], .entity-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                const entity = (e.target as HTMLElement).getAttribute('data-entity');
+                const entity = (e.target as HTMLElement).getAttribute('data-entity') ||
+                              (e.target as HTMLElement).textContent?.trim().toLowerCase();
                 if (entity) {
                     this.selectEntity(entity);
                 }
             });
         });
 
-        // Toolbar buttons
-        document.getElementById('importBtn')?.addEventListener('click', () => this.importLevel());
-        document.getElementById('exportBtn')?.addEventListener('click', () => this.exportLevel());
-        document.getElementById('playtestBtn')?.addEventListener('click', () => this.playtest());
+        // Toolbar buttons - handle multiple button selectors
+        const importBtn = document.getElementById('importBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const playtestBtn = document.getElementById('playtestBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
 
-        // Zoom controls
-        document.getElementById('zoomIn')?.addEventListener('click', () => this.canvas.zoomIn());
-        document.getElementById('zoomOut')?.addEventListener('click', () => this.canvas.zoomOut());
-        document.getElementById('zoomReset')?.addEventListener('click', () => this.canvas.zoomReset());
+        importBtn?.addEventListener('click', () => this.importLevel());
+        exportBtn?.addEventListener('click', () => this.exportLevel());
+        playtestBtn?.addEventListener('click', () => this.playtest());
+        saveBtn?.addEventListener('click', () => this.saveLevel());
+        loadBtn?.addEventListener('click', () => this.loadLevelFromFile());
+
+        // Zoom controls - handle multiple zoom button selectors
+        const zoomInBtn = document.getElementById('zoomIn') || document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOut') || document.getElementById('zoomOutBtn');
+        const zoomResetBtn = document.getElementById('zoomReset') || document.getElementById('zoomResetBtn');
+        const resetCameraBtn = document.getElementById('resetCameraBtn');
+
+        zoomInBtn?.addEventListener('click', () => this.canvas.zoomIn());
+        zoomOutBtn?.addEventListener('click', () => this.canvas.zoomOut());
+        zoomResetBtn?.addEventListener('click', () => this.canvas.zoomReset());
+        resetCameraBtn?.addEventListener('click', () => this.canvas.zoomReset());
 
         // Playtest controls
         document.getElementById('closePlaytest')?.addEventListener('click', () => this.closePlaytest());
 
         // Import file input
-        document.getElementById('importFile')?.addEventListener('change', (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (file) {
-                this.importManager.importFile(file).then((levelData: LevelData) => {
-                    this.loadLevel(levelData);
-                }).catch((error: unknown) => {
-                    console.error('Import failed:', error);
-                    this.updateStatus('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-                });
-            }
-        });
+        const importFile = document.getElementById('importFile') as HTMLInputElement;
+        if (importFile) {
+            importFile.addEventListener('change', (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                    this.importManager.importFile(file).then((levelData: LevelData) => {
+                        this.loadLevel(levelData);
+                    }).catch((error: unknown) => {
+                        console.error('Import failed:', error);
+                        this.updateStatus('Import failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                    });
+                }
+            });
+        }
 
         // Canvas events
         this.canvas.onTileClick = (x: number, y: number) => this.handleTileClick(x, y);
         this.canvas.onEntityClick = (entity: EntityData) => this.handleEntityClick(entity);
         this.canvas.onEntityPlace = (x: number, y: number) => this.handleEntityPlace(x, y);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
+
+        // Window resize
+        window.addEventListener('resize', () => this.handleWindowResize());
     }
 
     private createDefaultLevel(): void {
@@ -402,6 +432,84 @@ export class EditorApp {
             statusElement.textContent = message;
         }
         console.log('Editor Status:', message);
+    }
+
+    private saveLevel(): void {
+        try {
+            const dataStr = JSON.stringify(this.currentLevel, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `${this.currentLevel.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+            link.click();
+            
+            URL.revokeObjectURL(link.href);
+            this.updateStatus('Level saved successfully');
+        } catch (error: unknown) {
+            console.error('Failed to save level:', error);
+            this.updateStatus('Save failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        }
+    }
+
+    private loadLevelFromFile(): void {
+        const fileInput = document.getElementById('importFile') as HTMLInputElement;
+        if (fileInput) {
+            fileInput.click();
+        }
+    }
+
+    private handleKeyboardShortcuts(e: KeyboardEvent): void {
+        // Prevent default behavior for editor shortcuts
+        if (e.ctrlKey || e.metaKey) {
+            switch (e.key.toLowerCase()) {
+                case 's':
+                    e.preventDefault();
+                    this.saveLevel();
+                    break;
+                case 'o':
+                    e.preventDefault();
+                    this.loadLevelFromFile();
+                    break;
+                case 'e':
+                    e.preventDefault();
+                    this.exportLevel();
+                    break;
+                case 'p':
+                    e.preventDefault();
+                    this.playtest();
+                    break;
+            }
+        }
+
+        // Tool shortcuts
+        switch (e.key.toLowerCase()) {
+            case '1':
+                this.selectTool('select');
+                break;
+            case '2':
+                this.selectTool('paint');
+                break;
+            case '3':
+                this.selectTool('entity');
+                break;
+            case '4':
+                this.selectTool('link');
+                break;
+            case '5':
+                this.selectTool('erase');
+                break;
+            case 'escape':
+                this.selectTool('select');
+                break;
+        }
+    }
+
+    private handleWindowResize(): void {
+        // Update canvas size if needed
+        if (this.canvas) {
+            this.canvas.render();
+        }
     }
 
     public getCurrentLevel(): LevelData {

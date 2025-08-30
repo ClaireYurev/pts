@@ -1,177 +1,173 @@
-# PrinceTS Boot Configuration Examples
+# PTS BootConfig URL Examples
+
+This document provides examples of how to use the URL-based boot configuration system in PTS.
 
 ## Basic Examples
 
-### Start with Debug Mode
+### Quick Start with Level 3
 ```
-index.html?debug=true
+?level=3&health=200&god=1
 ```
+- Start at level 3
+- Player health set to 200
+- God mode enabled
 
-### Set Player Position and Health
+### Speed Run Mode
 ```
-index.html?playerX=100&playerY=200&health=75
+?speed=2.0&noclip=1&cutscenes=0
 ```
-
-### Load with Cheats
-```
-index.html?cheats=GodMode,NoClip&debug=true
-```
-
-### Platform Configuration
-```
-index.html?platform=gameboy&resolution=160x144
-```
-
-## Advanced Examples
-
-### Complete Game State
-```
-index.html?level=3&playerX=150&playerY=100&health=80&lives=2&score=7500&time=300&difficulty=hard&debug=true&cheats=GodMode,NoClip
-```
-
-### Accessibility Setup
-```
-index.html?highContrast=true&subtitles=true&musicVolume=0.3&sfxVolume=0.8&lang=en
-```
-
-### Speedrun Configuration
-```
-index.html?preset=speedrun&resolution=800x600&fullscreen=true
-```
-
-### Development Setup
-```
-index.html?preset=debug&platform=snes&resolution=1024x768&inputMethod=keyboard
-```
-
-## Preset Examples
-
-### Easy Mode
-```
-index.html?preset=easy
-```
-
-### Hard Mode
-```
-index.html?preset=hard
-```
-
-### Speedrun Mode
-```
-index.html?preset=speedrun
-```
+- 2x game speed
+- Noclip enabled
+- Cutscenes disabled
 
 ### Debug Mode
 ```
-index.html?preset=debug
+?god=1&noclip=1&infTime=1&editor=1
 ```
+- All cheats enabled
+- Editor mode enabled
 
-### Accessibility Mode
+### Audio Test
 ```
-index.html?preset=accessibility
+?vol=0.5&music=0&sfx=1
 ```
+- 50% master volume
+- Music disabled
+- SFX enabled
 
-## Test URLs for Different Scenarios
+## Advanced Examples
 
-### Testing Player Movement
+### Custom Player Position
 ```
-index.html?playerX=50&playerY=50&debug=true&cheats=GodMode
+?level=5&x=150&y=200&health=50&sword=1
 ```
+- Start at level 5
+- Player positioned at (150, 200)
+- Health set to 50
+- Player has sword
 
-### Testing Platform Rendering
+### Performance Settings
 ```
-index.html?platform=nes&resolution=256x240&debug=true
+?fps=120&vsync=0&speed=1.5&zoom=1.2
 ```
+- 120 FPS cap
+- VSync disabled
+- 1.5x game speed
+- 1.2x zoom level
 
-### Testing Audio
+### Input Customization
 ```
-index.html?musicVolume=0.5&sfxVolume=0.8&mute=false
+?deadzone=0.2&jumpbuf=150&sticky=1
 ```
+- 20% input deadzone
+- 150ms jump buffer
+- Sticky input enabled
 
-### Testing Accessibility
+### Save Slot Loading
 ```
-index.html?highContrast=true&subtitles=true&lang=es
+?slot=2
 ```
+- Load save from slot 2
 
-### Testing Fullscreen
+### External Pack Loading
 ```
-index.html?fullscreen=true&resolution=1920x1080
+?packUrl=https://example.com/gamepack.ptspack
 ```
+- Load external pack from URL
 
-### Testing Game State
-```
-index.html?level=2&score=10000&lives=5&time=600
-```
+## Complete Parameter Reference
 
-## Complex Combinations
+### Game Pack & Level
+- `pack` - Built-in pack name
+- `packUrl` - External pack URL
+- `level` - Starting level (1-999)
+- `room` - Starting room (1-999)
+- `x` - Player X position (-10000 to 10000)
+- `y` - Player Y position (-10000 to 10000)
 
-### Complete Development Setup
-```
-index.html?preset=debug&platform=snes&resolution=1024x768&fullscreen=true&inputMethod=keyboard&lang=en&skipCutscene=1
-```
+### Player State
+- `health` - Player health (0-9999)
+- `maxhealth` - Player max health (1-9999)
+- `sword` - Give player sword (0/1)
 
-### Complete Accessibility Setup
-```
-index.html?preset=accessibility&platform=gameboy&resolution=320x240&inputMethod=touch&lang=en
-```
+### Game Settings
+- `time` - Game timer (0-999999)
+- `seed` - Random seed (0-999999)
+- `difficulty` - Difficulty level (easy/normal/hard/extreme)
 
-### Complete Speedrun Setup
-```
-index.html?preset=speedrun&platform=nes&resolution=800x600&fullscreen=true&inputMethod=gamepad&skipCutscene=1
-```
+### Cheats
+- `noclip` - Noclip mode (0/1)
+- `god` - God mode (0/1)
+- `infTime` - Infinite time (0/1)
+- `reveal` - Reveal map (0/1)
+- `givesword` - Give sword (0/1)
+- `setguards` - Set number of guards (0-100)
 
-## URL Structure Reference
+### Performance
+- `speed` - Game speed multiplier (0.1-10.0)
+- `fps` - FPS cap (30-240)
+- `vsync` - VSync enabled (0/1)
 
-### Parameter Format
-```
-?param1=value1&param2=value2&param3=value3
-```
+### Display
+- `scale` - Scaling mode (integer/fit/stretch)
+- `zoom` - Zoom level (0.1-10.0)
+- `fullscreen` - Fullscreen mode (0/1)
 
-### Boolean Values
-- `true` or `false` for boolean parameters
-- `1` or `0` for some boolean parameters (like `skipCutscene`)
+### Audio
+- `mute` - Mute all audio (0/1)
+- `music` - Music enabled (0/1)
+- `sfx` - Sound effects enabled (0/1)
+- `vol` - Master volume (0.0-1.0)
+- `latency` - Audio latency (auto/low/compat)
 
-### Numeric Values
-- Use decimal numbers for volumes (0.0 to 1.0)
-- Use integers for positions, health, lives, etc.
+### Input
+- `keys` - Custom key bindings (string)
+- `deadzone` - Input deadzone (0.0-1.0)
+- `jumpbuf` - Jump buffer in ms (0-200)
+- `sticky` - Sticky input (0/1)
 
-### Comma-Separated Lists
-- Use for cheats: `cheats=GodMode,NoClip,InfiniteTime`
+### UI & Accessibility
+- `hud` - HUD visibility (0/1)
+- `cutscenes` - Cutscenes enabled (0/1)
+- `lang` - Language code (string)
+- `slot` - Save slot (1/2/3/Q)
 
-### Resolution Format
-- Use `widthxheight` format: `resolution=800x600`
+### Development
+- `editor` - Editor mode (0/1)
 
-## Testing Tips
+## Precedence Rules
 
-1. **Start Simple**: Begin with basic parameters like `debug=true`
-2. **Test One at a Time**: Add parameters one by one to isolate issues
-3. **Use Presets**: Use presets for common configurations
-4. **Check Console**: Enable debug mode to see configuration logs
-5. **Validate Parameters**: Check browser console for validation errors
+The boot configuration follows this precedence order (highest to lowest):
 
-## Browser Compatibility
+1. **URL Parameters** - Session-specific overrides
+2. **SettingsStore** - User's saved settings
+3. **Pack Defaults** - Pack-specific defaults
+4. **Engine Defaults** - System defaults
 
-### Modern Browsers
-- All features supported
-- Clipboard API for share links
-- Fullscreen API
+## Default Values
 
-### Older Browsers
-- URLSearchParams polyfill may be needed
-- Some features may not work (fullscreen, clipboard)
+- `level`: 1
+- `cutscenes`: false
+- `mute`: true (until user input)
+- `health`: 100
+- `maxhealth`: 100
+- `difficulty`: normal
+- `scale`: integer
+- `fullscreen`: false
+- `vol`: 1.0
+- `music`: true
+- `sfx`: true
+- `latency`: auto
+- `deadzone`: 0.1
+- `jumpbuf`: 100
+- `sticky`: false
+- `hud`: true
+- `lang`: en
+- `fps`: 60
+- `vsync`: true
+- `speed`: 1.0
+- `zoom`: 1.0
 
-## Error Handling
+## Testing
 
-### Invalid Parameters
-- Invalid parameters are logged as warnings
-- Game continues with default values
-- Check browser console for details
-
-### Missing Parameters
-- Optional parameters use default values
-- Required parameters may prevent game start
-
-### Parameter Validation
-- All parameters are validated on load
-- Invalid values are clamped to safe ranges
-- Unsupported values are ignored 
+Use the `boot-config-test.html` file to interactively test and generate boot URLs with the full parameter set. 

@@ -1,4 +1,3 @@
-import { Vec2 } from '../engine/Vector2.js';
 export interface DebugOverlayConfig {
     enabled?: boolean;
     showFPS?: boolean;
@@ -13,38 +12,47 @@ export interface DebugOverlayConfig {
     colliderColor?: string;
 }
 export interface DebugInfo {
-    fps?: number;
-    playerPosition?: Vec2;
-    playerState?: string;
-    flags?: Record<string, boolean>;
-    entities?: Array<{
-        id: string;
-        position: Vec2;
-        bounds?: {
-            x: number;
-            y: number;
-            width: number;
-            height: number;
-        };
-    }>;
-    camera?: Vec2;
-    memory?: {
-        entities: number;
-        sprites: number;
-        audio: number;
+    fps: number;
+    frameTime: number;
+    entities: number;
+    playerPosition: {
+        x: number;
+        y: number;
+    };
+    playerVelocity: {
+        x: number;
+        y: number;
+    };
+    playerHealth: number;
+    gameTime: number;
+    memoryUsage?: number;
+    renderStats?: {
+        drawCalls: number;
+        triangles: number;
+        culledObjects: number;
     };
 }
+export interface AABB {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+    label?: string;
+}
 export declare class DebugOverlay {
-    private enabled;
-    private config;
     private canvas;
     private ctx;
-    private lastFrameTime;
-    private fpsHistory;
+    private _isEnabled;
+    private isVisible;
     private debugInfo;
-    constructor(config?: DebugOverlayConfig);
+    private aabbs;
+    private fpsHistory;
+    private frameTimeHistory;
+    private maxHistoryLength;
+    constructor();
     /**
-     * Initialize the debug overlay
+     * Initialize debug overlay with canvas
      */
     initialize(canvas: HTMLCanvasElement): void;
     /**
@@ -52,36 +60,71 @@ export declare class DebugOverlay {
      */
     setEnabled(enabled: boolean): void;
     /**
-     * Check if debug overlay is enabled
+     * Get enabled state
      */
     isEnabled(): boolean;
     /**
+     * Toggle visibility
+     */
+    toggle(): void;
+    /**
      * Update debug information
      */
-    update(info: DebugInfo, deltaTime: number): void;
+    update(info: DebugInfo): void;
     /**
-     * Render the debug overlay
+     * Add AABB for rendering
+     */
+    addAABB(aabb: AABB): void;
+    /**
+     * Clear AABBs
+     */
+    clearAABBs(): void;
+    /**
+     * Render debug overlay
      */
     render(): void;
     /**
-     * Render collider boxes for entities
+     * Render AABBs (Axis-Aligned Bounding Boxes)
      */
-    private renderColliders;
+    private renderAABBs;
     /**
-     * Set debug configuration
+     * Render debug information panel
      */
-    setConfig(config: Partial<DebugOverlayConfig>): void;
+    private renderDebugPanel;
     /**
-     * Toggle a specific debug feature
+     * Render FPS graph
      */
-    toggleFeature(feature: keyof DebugOverlayConfig): void;
+    private renderFPSGraph;
     /**
-     * Get current configuration
+     * Setup keyboard bindings
      */
-    getConfig(): DebugOverlayConfig;
+    private setupKeyBindings;
     /**
-     * Get debug info for the overlay itself
+     * Get debug overlay state
      */
-    getDebugInfo(): Record<string, any>;
+    isDebugEnabled(): boolean;
+    isDebugVisible(): boolean;
+    /**
+     * Get current debug info
+     */
+    getDebugInfo(): DebugInfo | null;
+    /**
+     * Get FPS statistics
+     */
+    getFPSStats(): {
+        current: number;
+        average: number;
+        min: number;
+        max: number;
+    };
+    /**
+     * Get frame time statistics
+     */
+    getFrameTimeStats(): {
+        current: number;
+        average: number;
+        min: number;
+        max: number;
+    };
 }
 //# sourceMappingURL=DebugOverlay.d.ts.map

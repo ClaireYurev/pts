@@ -1,179 +1,499 @@
 import { VFS } from '../assets/VFS.js';
 export class LibraryManager {
-    constructor(config = {}) {
-        this.registry = new Map();
+    constructor(vfs) {
+        this.builtInPacks = [];
+        this.installedPacks = [];
+        this.urlPacks = [];
+        this.filePacks = [];
         this.currentPack = null;
-        this.idb = null;
-        this.config = {
-            builtinPacksPath: 'packs/manifest.json',
-            cacheEnabled: true,
-            ...config
-        };
-        this.vfs = config.vfs || new VFS({ cacheEnabled: this.config.cacheEnabled });
-        if (this.config.cacheEnabled) {
-            this.initLibraryDB();
-        }
-    }
-    async initLibraryDB() {
-        try {
-            const request = indexedDB.open('GameLibrary', 1);
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains('library')) {
-                    db.createObjectStore('library', { keyPath: 'id' });
-                }
-            };
-            request.onsuccess = () => {
-                this.idb = request.result;
-                this.loadRegistryFromDB();
-            };
-            request.onerror = () => {
-                console.warn('Failed to initialize library database');
-            };
-        }
-        catch (error) {
-            console.warn('Library database initialization failed:', error);
-        }
+        this.vfs = vfs || new VFS();
+        this.loadBuiltInPacks();
     }
     /**
-     * Initialize the library with built-in packs
+     * Initialize the library manager
      */
     async initialize() {
-        try {
-            // Load built-in packs from manifest
-            await this.loadBuiltinPacks();
-            // Load cached packs from IndexedDB
-            if (this.config.cacheEnabled) {
-                await this.loadRegistryFromDB();
-            }
-            console.log(`Library initialized with ${this.registry.size} packs`);
-        }
-        catch (error) {
-            console.error('Failed to initialize library:', error);
-        }
+        await this.loadBuiltInPacks();
     }
     /**
      * Load built-in packs from manifest.json
      */
-    async loadBuiltinPacks() {
+    async loadBuiltInPacks() {
         try {
-            const manifest = await this.vfs.readJson(this.config.builtinPacksPath);
-            if (manifest && manifest.packs) {
-                for (const packInfo of manifest.packs) {
-                    const item = {
-                        id: packInfo.id,
-                        name: packInfo.name,
-                        description: packInfo.description,
-                        cover: packInfo.cover,
-                        source: 'builtin',
-                        urlOrKey: packInfo.path || packInfo.id,
-                        installed: true
-                    };
-                    this.registry.set(item.id, item);
-                }
-            }
+            const manifest = await this.vfs.readJson('manifest.json');
+            this.builtInPacks = manifest.packs?.map((pack) => ({
+                ...pack,
+                type: 'built-in',
+                source: pack.manifest || `packs/${pack.id}/pack.json`
+            })) || [];
         }
         catch (error) {
-            console.warn('Failed to load built-in packs:', error);
+            console.warn('Failed to load built-in packs manifest:', error);
+            // Fallback to default packs
+            this.builtInPacks = [
+                {
+                    id: 'example',
+                    name: 'Example Game',
+                    description: 'A sample game pack',
+                    version: '1.0.0',
+                    author: 'PTS Engine',
+                    manifest: 'packs/example/pack.json',
+                    type: 'built-in',
+                    source: 'packs/example/pack.json'
+                }
+            ];
         }
     }
     /**
-     * Load registry from IndexedDB
+     * Get all available packs
      */
-    async loadRegistryFromDB() {
-        if (!this.idb) {
-            return;
-        }
+    async getAllPacks() {
+        const items = [];
+        // Built-in packs
+        this.builtInPacks.forEach(pack => {
+            items.push({
+                pack,
+                isInstalled: true,
+                canInstall: false,
+                isBuiltIn: true
+            });
+        });
+        // Installed packs
+        this.installedPacks.forEach(pack => {
+            items.push({
+                pack,
+                isInstalled: true,
+                canInstall: false,
+                isBuiltIn: false
+            });
+        });
+        // URL packs
+        this.urlPacks.forEach(pack => {
+            const isInstalled = this.installedPacks.some(p => p.id === pack.id);
+            items.push({
+                pack,
+                isInstalled,
+                canInstall: !isInstalled,
+                isBuiltIn: false
+            });
+        });
+        // File packs
+        this.filePacks.forEach(pack => {
+            const isInstalled = this.installedPacks.some(p => p.id === pack.id);
+            items.push({
+                pack,
+                isInstalled,
+                canInstall: !isInstalled,
+                isBuiltIn: false
+            });
+        });
+        return items;
+    }
+    /**
+     * Add pack from URL
+     */
+    async addFromUrl(url) {
         try {
-            const transaction = this.idb.transaction(['library'], 'readonly');
-            const store = transaction.objectStore('library');
-            const request = store.getAll();
-            request.onsuccess = () => {
-                const items = request.result;
-                for (const item of items) {
-                    if (item.source !== 'builtin') {
-                        this.registry.set(item.id, item);
-                    }
+            // Security check: Rate limit URL loads
+            const rateLimitCheck = window.ptsCore?.securityManager?.checkRateLimit('urlLoad', 'user');
+            if (rateLimitCheck && !rateLimitCheck.allowed) {
+                throw new Error(`Too many URL loads. Please wait ${Math.ceil((rateLimitCheck.resetTime - Date.now()) / 1000)} seconds.`);
+            }
+            // Security check: Validate URL
+            const securityManager = window.ptsCore?.securityManager;
+            if (securityManager) {
+                const urlValidation = securityManager.validateUrl(url);
+                if (!urlValidation.valid) {
+                    throw new Error(`URL validation failed: ${urlValidation.error}`);
                 }
+            }
+            // Validate URL format
+            if (!this.isValidUrl(url)) {
+                throw new Error('Invalid URL format');
+            }
+            // Try to load pack manifest
+            const manifest = await this.vfs.readJson(url);
+            // Security check: Validate pack manifest
+            if (securityManager) {
+                const manifestValidation = securityManager.validatePackManifest(manifest);
+                if (!manifestValidation.valid) {
+                    throw new Error(`Pack manifest validation failed: ${manifestValidation.error}`);
+                }
+            }
+            // Validate pack manifest
+            const validation = this.validatePackManifest(manifest);
+            if (!validation.valid) {
+                throw new Error(`Invalid pack manifest: ${validation.errors.join(', ')}`);
+            }
+            const pack = {
+                id: manifest.id,
+                name: manifest.name,
+                description: manifest.description || '',
+                version: manifest.version,
+                author: manifest.author || 'Unknown',
+                thumbnail: manifest.thumbnail,
+                manifest: url,
+                type: 'url',
+                source: url,
+                size: 0 // Will be calculated below
+            };
+            // Calculate pack size
+            pack.size = await this.calculatePackSize(pack);
+            // Check if already exists
+            const existingIndex = this.urlPacks.findIndex(p => p.id === pack.id);
+            if (existingIndex >= 0) {
+                this.urlPacks[existingIndex] = pack;
+            }
+            else {
+                this.urlPacks.push(pack);
+            }
+            return pack;
+        }
+        catch (error) {
+            console.error('Failed to add pack from URL:', error);
+            throw error;
+        }
+    }
+    /**
+     * Add pack from file
+     */
+    async addFromFile(file) {
+        try {
+            // Security check: Rate limit file uploads
+            const rateLimitCheck = window.ptsCore?.securityManager?.checkRateLimit('fileUpload', 'user');
+            if (rateLimitCheck && !rateLimitCheck.allowed) {
+                throw new Error(`Too many file uploads. Please wait ${Math.ceil((rateLimitCheck.resetTime - Date.now()) / 1000)} seconds.`);
+            }
+            // Security check: Validate file
+            const securityManager = window.ptsCore?.securityManager;
+            if (securityManager) {
+                const fileValidation = securityManager.validateFileUpload(file);
+                if (!fileValidation.valid) {
+                    throw new Error(`File validation failed: ${fileValidation.error}`);
+                }
+            }
+            // Validate file type
+            if (!this.isValidPackFile(file)) {
+                throw new Error('Invalid file type. Expected .ptspack or .json file');
+            }
+            let manifest;
+            if (file.name.endsWith('.ptspack')) {
+                // Handle zip file
+                manifest = await this.extractPackFromZip(file);
+            }
+            else {
+                // Handle JSON file
+                const text = await file.text();
+                manifest = JSON.parse(text);
+            }
+            // Security check: Validate pack manifest
+            if (securityManager) {
+                const manifestValidation = securityManager.validatePackManifest(manifest);
+                if (!manifestValidation.valid) {
+                    throw new Error(`Pack manifest validation failed: ${manifestValidation.error}`);
+                }
+            }
+            // Validate pack manifest
+            const validation = this.validatePackManifest(manifest);
+            if (!validation.valid) {
+                throw new Error(`Invalid pack manifest: ${validation.errors.join(', ')}`);
+            }
+            const pack = {
+                id: manifest.id,
+                name: manifest.name,
+                description: manifest.description || '',
+                version: manifest.version,
+                author: manifest.author || 'Unknown',
+                thumbnail: manifest.thumbnail,
+                manifest: file.name,
+                type: 'file',
+                source: file.name,
+                size: file.size
+            };
+            // Check if already exists
+            const existingIndex = this.filePacks.findIndex(p => p.id === pack.id);
+            if (existingIndex >= 0) {
+                this.filePacks[existingIndex] = pack;
+            }
+            else {
+                this.filePacks.push(pack);
+            }
+            return pack;
+        }
+        catch (error) {
+            console.error('Failed to add pack from file:', error);
+            throw error;
+        }
+    }
+    /**
+     * Install a pack (cache it locally)
+     */
+    async installPack(packId) {
+        try {
+            const pack = await this.findPack(packId);
+            if (!pack) {
+                return { success: false, packId, error: 'Pack not found' };
+            }
+            if (pack.type === 'built-in') {
+                return { success: false, packId, error: 'Built-in packs are already installed' };
+            }
+            // Check if already installed
+            if (this.installedPacks.some(p => p.id === packId)) {
+                return { success: false, packId, error: 'Pack already installed' };
+            }
+            // Download and cache the pack
+            const manifest = await this.vfs.readJson(pack.manifest);
+            const installedPack = {
+                ...pack,
+                type: 'installed',
+                installedAt: Date.now(),
+                size: await this.calculatePackSize(pack)
+            };
+            this.installedPacks.push(installedPack);
+            // Remove from URL/File lists if present
+            this.urlPacks = this.urlPacks.filter(p => p.id !== packId);
+            this.filePacks = this.filePacks.filter(p => p.id !== packId);
+            return {
+                success: true,
+                packId,
+                size: installedPack.size
             };
         }
         catch (error) {
-            console.warn('Failed to load registry from DB:', error);
+            console.error('Failed to install pack:', error);
+            return {
+                success: false,
+                packId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
         }
     }
     /**
-     * Save registry to IndexedDB
+     * Uninstall a pack
      */
-    async saveRegistryToDB() {
-        if (!this.idb) {
-            return;
+    async uninstallPack(packId) {
+        const index = this.installedPacks.findIndex(p => p.id === packId);
+        if (index >= 0) {
+            this.installedPacks.splice(index, 1);
+            return true;
         }
+        return false;
+    }
+    /**
+     * Switch to a different pack
+     */
+    async switchPack(packId) {
         try {
-            const transaction = this.idb.transaction(['library'], 'readwrite');
-            const store = transaction.objectStore('library');
-            for (const item of this.registry.values()) {
-                if (item.source !== 'builtin') {
-                    await new Promise((resolve, reject) => {
-                        const request = store.put(item);
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => reject(request.error);
-                    });
-                }
+            const pack = await this.findPack(packId);
+            if (!pack) {
+                console.error('Pack not found:', packId);
+                return false;
             }
+            // Validate the pack before switching
+            const validation = await this.validatePack(pack);
+            if (!validation.valid) {
+                console.error('Pack validation failed:', validation.errors);
+                return false;
+            }
+            // Notify about pack switch
+            if (this.onPackSwitch) {
+                this.onPackSwitch(pack);
+            }
+            this.currentPack = pack;
+            console.log(`Switched to pack: ${pack.name} (${pack.id})`);
+            return true;
         }
         catch (error) {
-            console.warn('Failed to save registry to DB:', error);
+            console.error('Failed to switch pack:', error);
+            return false;
         }
     }
     /**
-     * Get all library items
-     */
-    getLibraryItems() {
-        return Array.from(this.registry.values());
-    }
-    /**
-     * Get a specific library item
-     */
-    getLibraryItem(id) {
-        return this.registry.get(id);
-    }
-    /**
-     * Get the currently loaded pack
+     * Get current pack
      */
     getCurrentPack() {
         return this.currentPack;
     }
     /**
-     * Load a pack from URL
+     * Set pack switch callback
+     */
+    setPackSwitchCallback(callback) {
+        this.onPackSwitch = callback;
+    }
+    /**
+     * Find a pack by ID
+     */
+    async findPack(packId) {
+        const allPacks = [
+            ...this.builtInPacks,
+            ...this.installedPacks,
+            ...this.urlPacks,
+            ...this.filePacks
+        ];
+        return allPacks.find(p => p.id === packId) || null;
+    }
+    /**
+     * Validate pack manifest
+     */
+    validatePackManifest(manifest) {
+        const errors = [];
+        const warnings = [];
+        // Required fields
+        if (!manifest.id || typeof manifest.id !== 'string') {
+            errors.push('Missing or invalid id field');
+        }
+        if (!manifest.name || typeof manifest.name !== 'string') {
+            errors.push('Missing or invalid name field');
+        }
+        if (!manifest.version || typeof manifest.version !== 'string') {
+            errors.push('Missing or invalid version field');
+        }
+        // Optional but recommended fields
+        if (!manifest.description) {
+            warnings.push('Missing description field');
+        }
+        if (!manifest.author) {
+            warnings.push('Missing author field');
+        }
+        // Validate version format
+        if (manifest.version && !this.isValidVersion(manifest.version)) {
+            warnings.push('Version format should be semantic (e.g., 1.0.0)');
+        }
+        return {
+            valid: errors.length === 0,
+            errors,
+            warnings
+        };
+    }
+    /**
+     * Validate a complete pack
+     */
+    async validatePack(pack) {
+        const errors = [];
+        const warnings = [];
+        try {
+            // Load and validate manifest
+            const manifest = await this.vfs.readJson(pack.manifest);
+            const manifestValidation = this.validatePackManifest(manifest);
+            errors.push(...manifestValidation.errors);
+            warnings.push(...manifestValidation.warnings);
+            // Check for required assets
+            if (manifest.levels && Array.isArray(manifest.levels)) {
+                for (const level of manifest.levels) {
+                    if (level.file) {
+                        const levelExists = await this.vfs.validatePath(level.file);
+                        if (!levelExists) {
+                            errors.push(`Level file not found: ${level.file}`);
+                        }
+                    }
+                }
+            }
+            // Check for required scripts
+            if (manifest.scripts && Array.isArray(manifest.scripts)) {
+                for (const script of manifest.scripts) {
+                    if (script.file) {
+                        const scriptExists = await this.vfs.validatePath(script.file);
+                        if (!scriptExists) {
+                            errors.push(`Script file not found: ${script.file}`);
+                        }
+                    }
+                }
+            }
+        }
+        catch (error) {
+            errors.push(`Failed to load pack manifest: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        return {
+            valid: errors.length === 0,
+            errors,
+            warnings
+        };
+    }
+    /**
+     * Extract pack from zip file
+     */
+    async extractPackFromZip(file) {
+        // This would require JSZip library
+        // For now, we'll throw an error
+        throw new Error('Zip file support not implemented. Please use JSON format.');
+    }
+    /**
+     * Calculate pack size
+     */
+    async calculatePackSize(pack) {
+        // This would calculate the total size of all pack assets
+        // For now, return a default size
+        return 1024 * 1024; // 1MB default
+    }
+    /**
+     * Validate URL format
+     */
+    isValidUrl(url) {
+        try {
+            new URL(url);
+            return true;
+        }
+        catch {
+            return false;
+        }
+    }
+    /**
+     * Validate file type
+     */
+    isValidPackFile(file) {
+        const validExtensions = ['.ptspack', '.json'];
+        return validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    }
+    /**
+     * Validate version format
+     */
+    isValidVersion(version) {
+        const semverRegex = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/;
+        return semverRegex.test(version);
+    }
+    /**
+     * Get VFS instance
+     */
+    getVFS() {
+        return this.vfs;
+    }
+    /**
+     * Clear all non-built-in packs
+     */
+    clearAllPacks() {
+        this.installedPacks = [];
+        this.urlPacks = [];
+        this.filePacks = [];
+    }
+    /**
+     * Get library statistics
+     */
+    getStats() {
+        return {
+            totalPacks: this.builtInPacks.length + this.installedPacks.length + this.urlPacks.length + this.filePacks.length,
+            builtInPacks: this.builtInPacks.length,
+            installedPacks: this.installedPacks.length,
+            urlPacks: this.urlPacks.length,
+            filePacks: this.filePacks.length
+        };
+    }
+    /**
+     * Load pack from URL
      */
     async loadPackFromUrl(url) {
         try {
-            // Validate URL
-            if (!url.startsWith('https://')) {
-                throw new Error('Only HTTPS URLs are supported for security');
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch pack from URL: ${response.statusText}`);
             }
-            // Load and validate pack
-            const packData = await this.vfs.readJson(url);
-            const validatedPack = this.validatePack(packData);
-            // Create library item
-            const item = {
-                id: validatedPack.id,
-                name: validatedPack.name,
-                description: validatedPack.description,
-                cover: validatedPack.cover,
-                source: 'url',
-                urlOrKey: url,
-                installed: false,
-                pack: validatedPack
+            const packData = await response.json();
+            const pack = {
+                ...packData,
+                type: 'url',
+                source: url,
+                installedAt: Date.now()
             };
-            // Add to registry
-            this.registry.set(item.id, item);
-            // Save to IndexedDB
-            if (this.config.cacheEnabled) {
-                await this.saveRegistryToDB();
-            }
-            console.log(`Loaded pack from URL: ${validatedPack.name}`);
-            return item;
+            this.urlPacks.push(pack);
         }
         catch (error) {
             console.error('Failed to load pack from URL:', error);
@@ -181,32 +501,19 @@ export class LibraryManager {
         }
     }
     /**
-     * Load a pack from local file
+     * Load pack from file
      */
     async loadPackFromFile(file) {
         try {
-            // Validate file type
-            if (!file.name.endsWith('.ptspack.json')) {
-                throw new Error('Invalid file type. Expected .ptspack.json file');
-            }
-            // Read and validate pack
-            const packData = await this.vfs.readLocalFile(file);
-            const validatedPack = this.validatePack(packData);
-            // Create library item
-            const item = {
-                id: validatedPack.id,
-                name: validatedPack.name,
-                description: validatedPack.description,
-                cover: validatedPack.cover,
-                source: 'local',
-                urlOrKey: file.name,
-                installed: false,
-                pack: validatedPack
+            const text = await file.text();
+            const packData = JSON.parse(text);
+            const pack = {
+                ...packData,
+                type: 'file',
+                source: file.name,
+                installedAt: Date.now()
             };
-            // Add to registry (ephemeral, not saved to DB)
-            this.registry.set(item.id, item);
-            console.log(`Loaded pack from file: ${validatedPack.name}`);
-            return item;
+            this.filePacks.push(pack);
         }
         catch (error) {
             console.error('Failed to load pack from file:', error);
@@ -214,176 +521,24 @@ export class LibraryManager {
         }
     }
     /**
-     * Install a local pack to cache
+     * Get library items
      */
-    async installLocalPack(itemId) {
-        const item = this.registry.get(itemId);
-        if (!item || item.source !== 'local') {
-            throw new Error('Invalid item or not a local pack');
-        }
-        try {
-            item.installed = true;
-            // Save to IndexedDB
-            if (this.config.cacheEnabled) {
-                await this.saveRegistryToDB();
-            }
-            console.log(`Installed local pack: ${item.name}`);
-        }
-        catch (error) {
-            console.error('Failed to install local pack:', error);
-            throw error;
-        }
+    async getLibraryItems() {
+        return this.getAllPacks();
     }
     /**
-     * Switch to a different pack
-     */
-    async switchPack(packId) {
-        const item = this.registry.get(packId);
-        if (!item) {
-            throw new Error(`Pack not found: ${packId}`);
-        }
-        try {
-            // Load pack data if not already loaded
-            if (!item.pack) {
-                if (item.source === 'builtin') {
-                    item.pack = await this.vfs.readJson(item.urlOrKey);
-                }
-                else if (item.source === 'url') {
-                    item.pack = await this.vfs.readJson(item.urlOrKey);
-                }
-                else {
-                    throw new Error('Local pack data not available');
-                }
-            }
-            // Update last played timestamp
-            item.lastPlayed = Date.now();
-            // Set as current pack
-            this.currentPack = packId;
-            // Save to IndexedDB
-            if (this.config.cacheEnabled) {
-                await this.saveRegistryToDB();
-            }
-            if (item.pack) {
-                console.log(`Switched to pack: ${item.pack.name}`);
-                return item.pack;
-            }
-            else {
-                throw new Error('Pack data is undefined');
-            }
-        }
-        catch (error) {
-            console.error('Failed to switch pack:', error);
-            throw error;
-        }
-    }
-    /**
-     * Remove a pack from the library
+     * Remove pack
      */
     async removePack(packId) {
-        const item = this.registry.get(packId);
-        if (!item) {
-            throw new Error(`Pack not found: ${packId}`);
-        }
-        // Don't allow removing built-in packs
-        if (item.source === 'builtin') {
-            throw new Error('Cannot remove built-in packs');
-        }
-        try {
-            // Remove from registry
-            this.registry.delete(packId);
-            // Remove from IndexedDB
-            if (this.idb) {
-                const transaction = this.idb.transaction(['library'], 'readwrite');
-                const store = transaction.objectStore('library');
-                await new Promise((resolve, reject) => {
-                    const request = store.delete(packId);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            // Clear current pack if it was the one removed
-            if (this.currentPack === packId) {
-                this.currentPack = null;
-            }
-            console.log(`Removed pack: ${item.name}`);
-        }
-        catch (error) {
-            console.error('Failed to remove pack:', error);
-            throw error;
-        }
+        this.installedPacks = this.installedPacks.filter(pack => pack.id !== packId);
+        this.urlPacks = this.urlPacks.filter(pack => pack.id !== packId);
+        this.filePacks = this.filePacks.filter(pack => pack.id !== packId);
     }
     /**
-     * Validate pack data structure
-     */
-    validatePack(data) {
-        if (!data || typeof data !== 'object') {
-            throw new Error('Invalid pack data: not an object');
-        }
-        if (!data.id || typeof data.id !== 'string') {
-            throw new Error('Invalid pack data: missing or invalid id');
-        }
-        if (!data.name || typeof data.name !== 'string') {
-            throw new Error('Invalid pack data: missing or invalid name');
-        }
-        if (!data.version || typeof data.version !== 'string') {
-            throw new Error('Invalid pack data: missing or invalid version');
-        }
-        if (!data.levels || !Array.isArray(data.levels)) {
-            throw new Error('Invalid pack data: missing or invalid levels array');
-        }
-        // Basic schema validation (stub - can be expanded)
-        const pack = {
-            id: data.id,
-            name: data.name,
-            description: data.description,
-            version: data.version,
-            author: data.author,
-            cover: data.cover,
-            levels: data.levels,
-            assets: data.assets || {},
-            metadata: data.metadata
-        };
-        return pack;
-    }
-    /**
-     * Get pack statistics
-     */
-    getStats() {
-        const items = Array.from(this.registry.values());
-        return {
-            totalPacks: items.length,
-            builtinPacks: items.filter(item => item.source === 'builtin').length,
-            urlPacks: items.filter(item => item.source === 'url').length,
-            localPacks: items.filter(item => item.source === 'local').length,
-            installedPacks: items.filter(item => item.installed).length
-        };
-    }
-    /**
-     * Clear all cached data
+     * Clear cache
      */
     async clearCache() {
-        await this.vfs.clearCache();
-        // Clear non-builtin packs from registry
-        for (const [id, item] of this.registry.entries()) {
-            if (item.source !== 'builtin') {
-                this.registry.delete(id);
-            }
-        }
-        // Clear IndexedDB
-        if (this.idb) {
-            try {
-                const transaction = this.idb.transaction(['library'], 'readwrite');
-                const store = transaction.objectStore('library');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            catch (error) {
-                console.warn('Failed to clear library database:', error);
-            }
-        }
+        this.vfs.clearCache();
     }
 }
 //# sourceMappingURL=LibraryManager.js.map

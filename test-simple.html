@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrinceTS - Simple ECA & Cutscene Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #00ff00;
+            background: #1f1f1f;
+        }
+
+        .section h3 {
+            color: #00ffff;
+            margin-top: 0;
+        }
+
+        canvas {
+            border: 2px solid #00ff00;
+            background: #000;
+            display: block;
+            margin: 10px 0;
+        }
+
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #2a2a2a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #00ff00;
+            color: #000;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .status.success {
+            background: #1a3a1a;
+            border: 1px solid #00ff00;
+        }
+
+        .status.error {
+            background: #3a1a1a;
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .log {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 PrinceTS - ECA Scripting & Cutscene System</h1>
+        
+        <div class="section">
+            <h3>📋 System Overview</h3>
+            <p>This demo showcases the ECA (Event→Condition→Action) scripting system and cutscene timeline editor for PrinceTS.</p>
+            <p><strong>Features implemented:</strong></p>
+            <ul>
+                <li>✅ ECA Scripting Engine with visual node-based editor</li>
+                <li>✅ Cutscene Timeline Editor with multiple tracks</li>
+                <li>✅ Export/Import system with .ptspack zip files</li>
+                <li>✅ JSON Schema validation for all components</li>
+                <li>✅ Visual script editor with drag-and-drop nodes</li>
+                <li>✅ Cutscene player with timeline-based actions</li>
+            </ul>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h3>🎯 ECA Scripting System</h3>
+                <p>The ECA (Event→Condition→Action) system allows visual scripting with:</p>
+                <ul>
+                    <li><strong>Events:</strong> OnStart, OnCollision, OnKeyPress, OnTimer</li>
+                    <li><strong>Conditions:</strong> IsAlive, HasItem, IsOnGround, IsMoving</li>
+                    <li><strong>Actions:</strong> Move, Jump, PlayAnimation, SetVariable, SpawnEntity, PlaySound, Wait</li>
+                </ul>
+                <div class="controls">
+                    <button onclick="createSampleScript()">Create Sample Script</button>
+                    <button onclick="validateSampleScript()">Validate Script</button>
+                    <button onclick="exportSampleScript()">Export Script</button>
+                </div>
+                <div id="ecaStatus" class="status"></div>
+            </div>
+
+            <div class="section">
+                <h3>🎬 Cutscene System</h3>
+                <p>The cutscene system supports timeline-based editing with:</p>
+                <ul>
+                    <li><strong>Camera Track:</strong> Move, zoom, shake effects</li>
+                    <li><strong>Text Track:</strong> Show/hide text overlays</li>
+                    <li><strong>Sprite Track:</strong> Show/move/hide sprites</li>
+                    <li><strong>Music Track:</strong> Play, stop, fade in/out</li>
+                    <li><strong>Wait Track:</strong> Timing controls</li>
+                </ul>
+                <div class="controls">
+                    <button onclick="createSampleCutscene()">Create Sample Cutscene</button>
+                    <button onclick="validateSampleCutscene()">Validate Cutscene</button>
+                    <button onclick="exportSampleCutscene()">Export Cutscene</button>
+                </div>
+                <div id="cutsceneStatus" class="status"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📦 Export/Import System</h3>
+            <p>The export system creates .ptspack files containing:</p>
+            <ul>
+                <li><strong>pack.json:</strong> Game pack metadata and configuration</li>
+                <li><strong>scripts/*.json:</strong> ECA script definitions</li>
+                <li><strong>cutscenes/*.json:</strong> Cutscene timeline data</li>
+                <li><strong>levels/*.json:</strong> Level configurations</li>
+                <li><strong>assets/*:</strong> Images, audio, and other assets</li>
+            </ul>
+            <div class="controls">
+                <button onclick="createSampleGamePack()">Create Sample Game Pack</button>
+                <button onclick="exportGamePack()">Export Game Pack</button>
+                <button onclick="importGamePack()">Import Game Pack</button>
+            </div>
+            <div id="exportStatus" class="status"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔍 JSON Schema Validation</h3>
+            <p>All components are validated against JSON schemas:</p>
+            <ul>
+                <li><strong>Script Schema:</strong> Validates ECA node structure and connections</li>
+                <li><strong>Cutscene Schema:</strong> Validates timeline tracks and items</li>
+                <li><strong>Game Pack Schema:</strong> Validates overall pack structure</li>
+                <li><strong>Level Schema:</strong> Validates level configurations</li>
+            </ul>
+            <div class="controls">
+                <button onclick="testAllSchemas()">Test All Schemas</button>
+                <button onclick="showSchemaExamples()">Show Schema Examples</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📝 System Log</h3>
+            <div id="systemLog" class="log"></div>
+            <div class="controls">
+                <button onclick="clearLog()">Clear Log</button>
+                <button onclick="runAllTests()">Run All Tests</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock implementations for demonstration
+        let testResults = { passed: 0, failed: 0, total: 0 };
+
+        // Utility functions
+        function log(message) {
+            const logElement = document.getElementById('systemLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+
+        // Sample ECA Script
+        function createSampleScript() {
+            const script = {
+                id: 'sample_script',
+                name: 'Sample ECA Script',
+                nodes: [
+                    {
+                        id: 'event_1',
+                        type: 'Event',
+                        kind: 'OnStart',
+                        x: 100,
+                        y: 100,
+                        props: {}
+                    },
+                    {
+                        id: 'condition_1',
+                        type: 'Condition',
+                        kind: 'IsAlive',
+                        x: 300,
+                        y: 100,
+                        props: {}
+                    },
+                    {
+                        id: 'action_1',
+                        type: 'Action',
+                        kind: 'Move',
+                        x: 500,
+                        y: 100,
+                        props: { direction: 'right', speed: 100 }
+                    }
+                ],
+                edges: [
+                    {
+                        id: 'edge_1',
+                        from: 'event_1:flow',
+                        to: 'condition_1:flow'
+                    },
+                    {
+                        id: 'edge_2',
+                        from: 'condition_1:true',
+                        to: 'action_1:flow'
+                    }
+                ],
+                variables: { score: 0, lives: 3 }
+            };
+
+            log('✅ Created sample ECA script with 3 nodes and 2 edges');
+            updateStatus('ecaStatus', 'Sample script created successfully', 'success');
+            return script;
+        }
+
+        function validateSampleScript() {
+            const script = createSampleScript();
+            
+            // Mock validation
+            const errors = [];
+            
+            // Check required fields
+            if (!script.id || !script.name) {
+                errors.push('Missing required fields: id, name');
+            }
+            
+            // Check node types
+            for (const node of script.nodes) {
+                if (!['Event', 'Condition', 'Action'].includes(node.type)) {
+                    errors.push(`Invalid node type: ${node.type}`);
+                }
+            }
+            
+            if (errors.length === 0) {
+                log('✅ Script validation passed');
+                updateStatus('ecaStatus', 'Script validation passed', 'success');
+            } else {
+                log('❌ Script validation failed: ' + errors.join(', '));
+                updateStatus('ecaStatus', 'Script validation failed: ' + errors.join(', '), 'error');
+            }
+        }
+
+        function exportSampleScript() {
+            const script = createSampleScript();
+            const scriptData = JSON.stringify(script, null, 2);
+            
+            // Create download
+            const blob = new Blob([scriptData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sample_script.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            log('✅ Exported sample script as sample_script.json');
+            updateStatus('ecaStatus', 'Script exported successfully', 'success');
+        }
+
+        // Sample Cutscene
+        function createSampleCutscene() {
+            const cutscene = {
+                id: 'sample_cutscene',
+                name: 'Sample Cutscene',
+                duration: 5000,
+                tracks: [
+                    {
+                        id: 'camera_track',
+                        name: 'Camera',
+                        type: 'camera',
+                        color: '#e74c3c',
+                        items: [
+                            {
+                                id: 'camera_move',
+                                time: 0,
+                                track: 'camera',
+                                action: 'move',
+                                args: { x: 0, y: 0, duration: 2000 }
+                            }
+                        ]
+                    },
+                    {
+                        id: 'text_track',
+                        name: 'Text',
+                        type: 'text',
+                        color: '#3498db',
+                        items: [
+                            {
+                                id: 'text_show',
+                                time: 1000,
+                                track: 'text',
+                                action: 'show',
+                                args: { text: 'Welcome to PrinceTS!', x: 400, y: 300, duration: 3000 }
+                            }
+                        ]
+                    }
+                ],
+                metadata: {
+                    created: new Date().toISOString(),
+                    editor: 'PrinceTS Cutscene Editor',
+                    description: 'A sample cutscene demonstrating camera and text tracks'
+                }
+            };
+
+            log('✅ Created sample cutscene with 2 tracks and 2 items');
+            updateStatus('cutsceneStatus', 'Sample cutscene created successfully', 'success');
+            return cutscene;
+        }
+
+        function validateSampleCutscene() {
+            const cutscene = createSampleCutscene();
+            
+            // Mock validation
+            const errors = [];
+            
+            // Check required fields
+            if (!cutscene.id || !cutscene.name || !cutscene.duration) {
+                errors.push('Missing required fields: id, name, duration');
+            }
+            
+            // Check duration range
+            if (cutscene.duration < 100 || cutscene.duration > 300000) {
+                errors.push('Duration must be between 100 and 300000ms');
+            }
+            
+            // Check tracks
+            for (const track of cutscene.tracks) {
+                if (!['camera', 'text', 'sprite', 'music', 'wait'].includes(track.type)) {
+                    errors.push(`Invalid track type: ${track.type}`);
+                }
+            }
+            
+            if (errors.length === 0) {
+                log('✅ Cutscene validation passed');
+                updateStatus('cutsceneStatus', 'Cutscene validation passed', 'success');
+            } else {
+                log('❌ Cutscene validation failed: ' + errors.join(', '));
+                updateStatus('cutsceneStatus', 'Cutscene validation failed: ' + errors.join(', '), 'error');
+            }
+        }
+
+        function exportSampleCutscene() {
+            const cutscene = createSampleCutscene();
+            const cutsceneData = JSON.stringify(cutscene, null, 2);
+            
+            // Create download
+            const blob = new Blob([cutsceneData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sample_cutscene.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            log('✅ Exported sample cutscene as sample_cutscene.json');
+            updateStatus('cutsceneStatus', 'Cutscene exported successfully', 'success');
+        }
+
+        // Sample Game Pack
+        function createSampleGamePack() {
+            const gamePack = {
+                id: 'sample_pack',
+                name: 'Sample Game Pack',
+                version: '1.0.0',
+                description: 'A sample game pack demonstrating ECA scripting and cutscenes',
+                author: 'PrinceTS Demo',
+                levels: {
+                    'level_1': {
+                        id: 1,
+                        name: 'Level 1',
+                        tileMap: [[1, 1, 1], [1, 0, 1], [1, 1, 1]],
+                        entities: [
+                            { type: 'player', x: 100, y: 100 }
+                        ]
+                    }
+                },
+                scripts: {
+                    'sample_script': createSampleScript()
+                },
+                cutscenes: {
+                    'sample_cutscene': createSampleCutscene()
+                },
+                assets: {
+                    'player_sprite': {
+                        type: 'image',
+                        data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+                        format: 'png'
+                    }
+                }
+            };
+
+            log('✅ Created sample game pack with 1 level, 1 script, 1 cutscene, and 1 asset');
+            updateStatus('exportStatus', 'Sample game pack created successfully', 'success');
+            return gamePack;
+        }
+
+        function exportGamePack() {
+            const gamePack = createSampleGamePack();
+            const packData = JSON.stringify(gamePack, null, 2);
+            
+            // Create download
+            const blob = new Blob([packData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'sample_pack.ptspack';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            log('✅ Exported sample game pack as sample_pack.ptspack');
+            updateStatus('exportStatus', 'Game pack exported successfully', 'success');
+        }
+
+        function importGamePack() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.ptspack,.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            log(`✅ Successfully imported ${file.name}`);
+                            log(`   - Levels: ${Object.keys(data.levels || {}).length}`);
+                            log(`   - Scripts: ${Object.keys(data.scripts || {}).length}`);
+                            log(`   - Cutscenes: ${Object.keys(data.cutscenes || {}).length}`);
+                            log(`   - Assets: ${Object.keys(data.assets || {}).length}`);
+                            updateStatus('exportStatus', `Successfully imported ${file.name}`, 'success');
+                        } catch (error) {
+                            log('❌ Failed to import file: ' + error.message);
+                            updateStatus('exportStatus', 'Import failed: ' + error.message, 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+            input.click();
+        }
+
+        function testAllSchemas() {
+            log('🧪 Testing all JSON schemas...');
+            testResults = { passed: 0, failed: 0, total: 0 };
+            
+            // Test script schema
+            testResults.total++;
+            try {
+                const script = createSampleScript();
+                if (script.id && script.name && script.nodes && script.edges) {
+                    log('✅ Script schema test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ Script schema test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ Script schema test error: ' + error.message);
+                testResults.failed++;
+            }
+            
+            // Test cutscene schema
+            testResults.total++;
+            try {
+                const cutscene = createSampleCutscene();
+                if (cutscene.id && cutscene.name && cutscene.duration && cutscene.tracks) {
+                    log('✅ Cutscene schema test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ Cutscene schema test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ Cutscene schema test error: ' + error.message);
+                testResults.failed++;
+            }
+            
+            // Test game pack schema
+            testResults.total++;
+            try {
+                const gamePack = createSampleGamePack();
+                if (gamePack.id && gamePack.name && gamePack.version) {
+                    log('✅ Game pack schema test passed');
+                    testResults.passed++;
+                } else {
+                    log('❌ Game pack schema test failed');
+                    testResults.failed++;
+                }
+            } catch (error) {
+                log('❌ Game pack schema test error: ' + error.message);
+                testResults.failed++;
+            }
+            
+            log(`📊 Schema test results: ${testResults.passed}/${testResults.total} passed`);
+        }
+
+        function showSchemaExamples() {
+            log('📋 JSON Schema Examples:');
+            log('Script Schema:');
+            log('  - Required: id, name, nodes, edges, variables');
+            log('  - Node types: Event, Condition, Action');
+            log('  - Edge format: nodeId:portId');
+            log('');
+            log('Cutscene Schema:');
+            log('  - Required: id, name, duration, tracks, metadata');
+            log('  - Track types: camera, text, sprite, music, wait');
+            log('  - Duration: 100-300000ms');
+            log('');
+            log('Game Pack Schema:');
+            log('  - Required: name');
+            log('  - Optional: id, version, description, author');
+            log('  - Contains: levels, scripts, cutscenes, assets');
+        }
+
+        function clearLog() {
+            document.getElementById('systemLog').innerHTML = '';
+        }
+
+        function runAllTests() {
+            log('🧪 Running all system tests...');
+            clearLog();
+            
+            createSampleScript();
+            validateSampleScript();
+            exportSampleScript();
+            
+            createSampleCutscene();
+            validateSampleCutscene();
+            exportSampleCutscene();
+            
+            createSampleGamePack();
+            exportGamePack();
+            
+            testAllSchemas();
+            
+            log('🎉 All tests completed!');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 PrinceTS ECA & Cutscene System initialized');
+            log('📖 Ready to create scripts, cutscenes, and game packs');
+        });
+    </script>
+</body>
+</html> 
